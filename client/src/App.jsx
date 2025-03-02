@@ -11,6 +11,8 @@ import MessageModal from './components/MessageModal'
 import Auth from './components/auth/Auth'
 import ProfilePage from './components/profile/ProfilePage'
 import NotificationBell from './components/NotificationBell'
+import OfflineFallback from './components/OfflineFallback'
+import PWAInstallPrompt from './components/PWAInstallPrompt'
 import { AppContext } from './context/AppContext'
 import './App.css'
 
@@ -941,20 +943,28 @@ function App() {
 
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AppContent 
-        user={user}
-        onlineUsers={onlineUsers}
-        messages={messages}
-        handleSocketMessage={handleSocketMessage}
-        isConnected={isConnected}
-        connectionError={connectionError}
-        handleLogout={handleLogout}
-        userLocation={userLocation}
-        isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
-        notifications={notifications}
-        onClearNotifications={handleClearNotifications}
-      />
+      <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
+        <OfflineFallback />
+        <PWAInstallPrompt />
+        {user ? (
+          <AppContent
+            user={user}
+            onlineUsers={onlineUsers}
+            messages={messages}
+            handleSocketMessage={handleSocketMessage}
+            isConnected={isConnected}
+            connectionError={connectionError}
+            handleLogout={handleLogout}
+            userLocation={userLocation}
+            isDarkMode={isDarkMode}
+            toggleDarkMode={toggleDarkMode}
+            notifications={notifications}
+            onClearNotifications={handleClearNotifications}
+          />
+        ) : (
+          <Auth onAuthSuccess={handleAuthSuccess} />
+        )}
+      </div>
     </Router>
   )
 }
