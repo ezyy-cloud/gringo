@@ -385,11 +385,12 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
                 </button>
                 <button 
                   className="location-button"
-                  onClick={() => alert(`Location: ${selectedMessage.location.latitude}, ${selectedMessage.location.longitude}`)}
+                  onClick={() => alert(`Location: ${selectedMessage.location.latitude}, ${selectedMessage.location.longitude}${selectedMessage.location.fuzzyLocation === false ? ' (Exact)' : ' (Approximate)'}`)}
                   title="View location details"
                   tabIndex="-1"
                 >
                   <GoLocation className="location-icon" /> 
+                  {selectedMessage.location.fuzzyLocation === false ? 'Exact' : 'Approximate'}
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 {
-  "name": "gringoX",
+  "name": "gringo",
   "version": "1.0.0",
   "description": "Node.js Express API with Socket.IO integration",
   "main": "server.js",

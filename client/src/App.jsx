@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useCallback } from 'react'
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { GoChevronLeft, GoKebabHorizontal, GoPerson, GoSun, GoMoon, GoSignOut } from "react-icons/go"
 import PropTypes from 'prop-types'
 import socketService from './services/socketService'
@@ -13,6 +13,7 @@ import ProfilePage from './components/profile/ProfilePage'
 import NotificationBell from './components/NotificationBell'
 import OfflineFallback from './components/OfflineFallback'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
+import LandingPage from './components/LandingPage'
 import { AppContext } from './context/AppContext'
 import './App.css'
 
@@ -156,8 +157,8 @@ const AppContent = ({
     }
   };
 
-  // Check if user can post (last message was more than 30 minutes ago)
-  const canUserPost = () => {
+  // Check if user can share an update (last update was more than 30 minutes ago)
+  const canUserShareUpdate = () => {
     if (!user || !messages || messages.length === 0) return true;
     
     // Filter messages by current user
@@ -178,7 +179,7 @@ const AppContent = ({
     return timeDifference >= thirtyMinutesInMs;
   };
 
-  // Calculate time remaining before user can post again
+  // Calculate time remaining before user can share another update
   const getTimeRemaining = () => {
     if (!user || !messages || messages.length === 0) return 0;
     
@@ -208,7 +209,7 @@ const AppContent = ({
   };
 
   const openModal = () => {
-    if (canUserPost()) {
+    if (canUserShareUpdate()) {
       setIsModalOpen(true);
     } else {
       // Calculate initial time remaining
@@ -277,14 +278,14 @@ const AppContent = ({
               </div>
             </main>
 
-            {/* Floating Action Button for sending messages */}
+            {/* Floating Action Button for sharing updates */}
             <FloatingActionButton onClick={openModal} isDarkMode={isDarkMode} />
             
-            {/* Message Modal */}
+            {/* Update Modal */}
             <MessageModal 
               isOpen={isModalOpen} 
               onClose={closeModal} 
-              onSendMessage={handleSocketMessage}
+              onShareUpdate={handleSocketMessage}
               disabled={!isConnected || !user}
               placeholder="What's happening around?"
               isDarkMode={isDarkMode}
@@ -299,7 +300,7 @@ const AppContent = ({
                     <button className="close-button" onClick={closeCountdownModal}>×</button>
                   </div>
                   <div className="message-modal-form" style={{ padding: '20px', textAlign: 'center' }}>
-                    <p>You can only post once every 30 minutes.</p>
+                    <p>You can only share an update once every 30 minutes.</p>
                     <div style={{ 
                       fontSize: '24px', 
                       fontWeight: 'bold', 
@@ -308,7 +309,7 @@ const AppContent = ({
                     }}>
                       {formatTimeRemaining(timeRemaining)}
                     </div>
-                    <p>Time remaining before you can post again.</p>
+                    <p>Time remaining before you can share another update.</p>
                   </div>
                   <div className="message-modal-footer">
                     <button 
@@ -378,7 +379,7 @@ const createFallbackLocation = (messagesArray) => {
   };
 };
 
-// Extract another nested function to reduce nesting
+// Create a slightly varied location (within ~500m)
 const createVariedLocation = (baseLocation) => {
   // Create a slightly varied location (within ~500m)
   const latVariation = (Math.random() - 0.5) * 0.005;
@@ -388,6 +389,31 @@ const createVariedLocation = (baseLocation) => {
     latitude: baseLocation.latitude + latVariation,
     longitude: baseLocation.longitude + lngVariation,
     isFallback: true
+  };
+};
+
+// Create fuzzy location based on privacy settings
+const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
+  if (!baseLocation) return null;
+  
+  // If fuzzy location is not requested, return the exact location
+  if (!useFuzzyLocation) {
+    return {
+      latitude: baseLocation.latitude,
+      longitude: baseLocation.longitude,
+      isFallback: baseLocation.isFallback
+    };
+  }
+  
+  // For privacy, add a random offset (between 100m-500m)
+  // More random offset than standard varied location
+  const latVariation = (Math.random() - 0.5) * 0.01; // Roughly 0.5-1km variation
+  const lngVariation = (Math.random() - 0.5) * 0.01;
+  
+  return {
+    latitude: baseLocation.latitude + latVariation,
+    longitude: baseLocation.longitude + lngVariation,
+    isFallback: true // Mark as not exact location
   };
 };
 
@@ -734,14 +760,20 @@ function App() {
   }, [user]);
 
   // Add message handling for both text-only and image messages
-  const handleSocketMessage = async (message, formData = null) => {
+  const handleShareUpdate = async (message, formData = null) => {
     if (!isConnected) {
-      console.log('Not connected to socket, cannot send message');
+      console.log('Not connected to socket, cannot share update');
       return;
     }
 
     // Get current timestamp
     const currentTimestamp = new Date();
+    
+    // Get fuzzy location preference from formData if available
+    let useFuzzyLocation = true; // Default to true for privacy
+    if (formData && formData.get('fuzzyLocation')) {
+      useFuzzyLocation = formData.get('fuzzyLocation') === 'true';
+    }
     
     // Ensure we have location data - create a fallback location only if needed
     let messageLocation = userLocation;
@@ -754,8 +786,9 @@ function App() {
       messageLocation = createVariedLocation(messageLocation);
       console.log('Using varied fallback location:', messageLocation);
     } else {
-      // Using real user location
-      console.log('Using real user location:', messageLocation);
+      // Apply fuzzy location if requested
+      messageLocation = createFuzzyLocation(messageLocation, useFuzzyLocation);
+      console.log(useFuzzyLocation ? 'Using fuzzy location for privacy:' : 'Using exact location:', messageLocation);
     }
 
     // If formData is provided, send with image upload
@@ -998,26 +1031,25 @@ function App() {
     setNotifications([]);
   };
 
-  // Render Auth component when not logged in
+  // Render loading state when loading
   if (isLoading) {
     return <div className={`loading ${isDarkMode ? 'dark-mode' : ''}`}>Loading...</div>
   }
 
-  if (!user) {
-    return <Auth onAuthSuccess={handleAuthSuccess} isDarkMode={isDarkMode} />
-  }
-
+  // For both authenticated and non-authenticated users, use Router
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
         <OfflineFallback />
         <PWAInstallPrompt />
+        
         {user ? (
+          // Authenticated user content
           <AppContent
             user={user}
             onlineUsers={onlineUsers}
             messages={messages}
-            handleSocketMessage={handleSocketMessage}
+            handleSocketMessage={handleShareUpdate}
             isConnected={isConnected}
             connectionError={connectionError}
             handleLogout={handleLogout}
@@ -1028,7 +1060,16 @@ function App() {
             onClearNotifications={handleClearNotifications}
           />
         ) : (
-          <Auth onAuthSuccess={handleAuthSuccess} />
+          // Non-authenticated user - routing for landing and auth pages
+          <Routes>
+            <Route path="/auth" element={
+              <Auth onAuthSuccess={handleAuthSuccess} isDarkMode={isDarkMode} />
+            } />
+            <Route path="/" element={
+              <LandingPage isDarkMode={isDarkMode} />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         )}
       </div>
     </Router>

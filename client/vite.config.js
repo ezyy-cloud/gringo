@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'GringoX Chat',
-        short_name: 'GringoX',
-        description: 'GringoX - Socket.IO and Express API Chat Application',
+        name: 'Gringo',
+        short_name: 'Gringo',
+        description: 'Gringo - Socket.IO and Express API Chat Application',
         theme_color: '#ffffff',
         icons: [
           {

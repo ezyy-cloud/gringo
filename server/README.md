@@ -1,6 +1,6 @@
-# GringoX Server
+# Gringo Server
 
-The backend server component of the GringoX social networking application, built with Express, MongoDB, and Socket.IO for real-time communication.
+The backend server component of the Gringo social networking application, built with Express, MongoDB, and Socket.IO for real-time communication.
 
 ## Features
 

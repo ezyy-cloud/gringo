@@ -626,6 +626,14 @@ app.post('/api/messages/with-image', protect, upload.single('image'), async (req
       }
     }
     
+    // Get fuzzy location preference (defaults to true for privacy)
+    const useFuzzyLocation = req.body.fuzzyLocation !== 'false';
+    
+    // Add fuzzy location flag to location data
+    if (locationData) {
+      locationData.fuzzyLocation = useFuzzyLocation;
+    }
+    
     if (!message) {
       return res.status(400).json({ error: 'Message text is required' });
     }

@@ -21,23 +21,80 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--primary-color, #1da1f2);
+  background-color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
   z-index: 100;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.auth-navbar.scrolled {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.auth-navbar-content {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0 20px;
+}
+
+.auth-logo {
+  display: flex;
+  align-items: center;
+}
+
+.auth-logo img {
+  height: 32px;
+  margin-right: 8px;
+  /* Remove the filter to keep the original gradient colors */
 }
 
 .auth-navbar h1 {
-  color: white;
+  color: var(--primary-color, #1da1f2);
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
+  background: linear-gradient(45deg, var(--primary-color, #1da1f2), #6c5ce7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.back-to-home {
+  position: absolute;
+  left: 20px;
+  color: var(--primary-color, #1da1f2);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.back-to-home:hover {
+  opacity: 0.8;
 }
 
 .dark-mode .auth-navbar {
-  background-color: var(--dark-card-bg, #192734);
+  background-color: rgba(21, 32, 43, 0.9);
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.dark-mode .auth-navbar h1 {
+  background: linear-gradient(45deg, var(--primary-color, #1da1f2), #a29bfe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark-mode .back-to-home {
+  color: var(--primary-color, #1da1f2);
 }
 
 .auth-content {
@@ -48,6 +105,7 @@
   width: 100%;
   padding: 20px;
   flex: 1;
+  padding-top: calc(var(--header-height, 64px) + 20px); /* Add padding for fixed header */
 }
 
 .auth-tabs {
@@ -64,15 +122,19 @@
 
 .auth-tab {
   flex: 1;
-  padding: 12px 0;
+  padding: 10px 0;
   text-align: center;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--secondary-color, #657786);
   transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dark-mode .auth-tab {
@@ -85,7 +147,17 @@
 
 .auth-tab.active {
   color: var(--primary-color, #1da1f2);
-  border-bottom: 2px solid var(--primary-color, #1da1f2);
+}
+
+.auth-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  width: 50%;
+  height: 3px;
+  background-color: var(--primary-color, #1da1f2);
+  border-radius: 3px;
 }
 
 .dark-mode .auth-tab:hover,
@@ -148,29 +220,46 @@
 
 .auth-button {
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   background-color: var(--primary-color, #1da1f2);
   color: white;
   border: none;
-  border-radius: var(--border-radius, 12px);
+  border-radius: 50px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
   margin-top: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+  line-height: 1.2;
+  height: 38px;
 }
 
 .auth-button:hover {
   background-color: #0c8de4;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .auth-button:disabled {
   background-color: var(--light-gray, #aab8c2);
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.dark-mode .auth-button {
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .auth-button:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
 .dark-mode .auth-button:disabled {
   background-color: var(--dark-secondary-text, #8899a6);
+  box-shadow: none;
 }
 
 .error-message {
@@ -197,6 +286,23 @@
 
 /* Media query for smaller screens */
 @media (max-width: 767px) {
+  .auth-navbar {
+    height: 56px; /* Smaller height on mobile */
+  }
+  
+  .auth-logo img {
+    height: 24px;
+  }
+  
+  .auth-navbar h1 {
+    font-size: 1.3rem;
+  }
+  
+  .back-to-home {
+    font-size: 0.9rem;
+    left: 15px;
+  }
+  
   .auth-form {
     box-shadow: none;
     padding: 15px 0;
@@ -210,9 +316,6 @@
   
   .auth-content {
     padding: 10px;
-  }
-  
-  .auth-navbar h1 {
-    font-size: 1.3rem;
+    padding-top: calc(56px + 15px); /* Adjusted for smaller header */
   }
 } 

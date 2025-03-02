@@ -1,6 +1,6 @@
-# GringoX Client
+# Gringo Client
 
-A modern React frontend for the GringoX social networking application with real-time communication capabilities, responsive design, and interactive user interface.
+A modern React frontend for the Gringo social networking application with real-time communication capabilities, responsive design, and interactive user interface.
 
 ## Features
 

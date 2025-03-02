@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { GoArrowRight, GoPaperAirplane, GoDeviceCameraVideo, GoTrash } from "react-icons/go";
+import { GoArrowRight, GoPaperAirplane, GoDeviceCameraVideo, GoTrash, GoLocation } from "react-icons/go";
 import CameraCapture from './CameraCapture';
 import axios from 'axios';
 import './MessageModal.css';
 
-const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, isDarkMode }) => {
+const MessageModal = ({ isOpen, onClose, onShareUpdate, placeholder, disabled, isDarkMode }) => {
   const [message, setMessage] = useState('');
   const [image, setImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [fuzzyLocation, setFuzzyLocation] = useState(true); // Default to true for privacy
   const maxCharacters = 60;
   const remainingChars = maxCharacters - message.length;
 
@@ -35,9 +36,10 @@ const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, i
         }
         
         formData.append('message', trimmedMessage);
+        formData.append('fuzzyLocation', fuzzyLocation.toString());
         
         // Send to the server
-        onSendMessage(trimmedMessage, formData);
+        onShareUpdate(trimmedMessage, formData);
         
         // Reset state
         setMessage('');
@@ -91,7 +93,7 @@ const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, i
     <div className="message-modal-overlay" onClick={onClose}>
       <div className={`message-modal ${isDarkMode ? 'dark-mode' : ''}`} onClick={e => e.stopPropagation()}>
         <div className="message-modal-header">
-          <h3>Send Message</h3>
+          <h3>Share Update</h3>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
         <form className="message-modal-form" onSubmit={handleSubmit}>
@@ -137,6 +139,19 @@ const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, i
               {remainingChars}
             </div>
           </div>
+          
+          <div className="location-option">
+            <label className={`location-option-label ${isDarkMode ? 'dark-mode' : ''}`}>
+              <input 
+                type="checkbox" 
+                checked={fuzzyLocation} 
+                onChange={(e) => setFuzzyLocation(e.target.checked)} 
+              />
+              <GoLocation size={16} className="location-icon" />
+              <span>Use approximate location for privacy</span>
+            </label>
+          </div>
+          
           <div className="message-modal-footer">
             <button 
               type="button" 
@@ -149,7 +164,7 @@ const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, i
               type="submit" 
               className={`send-button-round ${!message.trim() || !image || disabled || isUploading ? 'disabled' : ''}`}
               disabled={!message.trim() || !image || disabled || isUploading}
-              aria-label="Send message"
+              aria-label="Share update"
             >
               <GoPaperAirplane size={18} />
             </button>
@@ -163,14 +178,14 @@ const MessageModal = ({ isOpen, onClose, onSendMessage, placeholder, disabled, i
 MessageModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
-  onSendMessage: PropTypes.func.isRequired,
+  onShareUpdate: PropTypes.func.isRequired,
   placeholder: PropTypes.string,
   disabled: PropTypes.bool,
   isDarkMode: PropTypes.bool
 };
 
 MessageModal.defaultProps = {
-  placeholder: 'Type your message...',
+  placeholder: 'What\'s happening?',
   disabled: false,
   isDarkMode: false
 };

@@ -7,7 +7,7 @@ const FloatingActionButton = ({ onClick, isDarkMode }) => {
     <button 
       className={`floating-action-button ${isDarkMode ? 'dark-mode' : ''}`} 
       onClick={onClick} 
-      aria-label="Create new message"
+      aria-label="Share new update"
     >
       <GoLocation size={24} />
     </button>

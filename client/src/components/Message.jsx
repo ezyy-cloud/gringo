@@ -31,7 +31,8 @@ const Message = ({ messageId, sender, content, timestamp, isReceived, location, 
   const formattedLocation = location ? 
     (location.error ? 
       <><GoPin /> Location unavailable</> : 
-      <><GoPin /> {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</>) : 
+      <><GoPin /> {location.fuzzyLocation === false ? 'Exact location: ' : 'Approximate location: '} 
+      {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</>) : 
     '';
   
   // Determine if username should be clickable (non-system messages)

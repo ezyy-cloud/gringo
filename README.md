@@ -1,6 +1,6 @@
-# GringoX - Real-Time Geospatial Social Networking Application
+# Gringo - Real-Time Geospatial Social Networking Application
 
-GringoX is a modern, full-stack social networking application that combines real-time messaging, geolocation features, and user interactions. Built with a powerful tech stack including React, Express, MongoDB, and Socket.IO, it offers a seamless social networking experience for users.
+Gringo is a modern, full-stack social networking application that combines real-time messaging, geolocation features, and user interactions. Built with a powerful tech stack including React, Express, MongoDB, and Socket.IO, it offers a seamless social networking experience for users.
 
 ## 🌟 Key Features
 
@@ -42,7 +42,7 @@ GringoX is a modern, full-stack social networking application that combines real
 ## 🏗️ Project Structure
 
 ```
-gringoX/
+gringo/
 ├── client/                 # React frontend application
 │   ├── src/                # Source code
 │   │   ├── components/     # React components
@@ -113,7 +113,7 @@ VITE_MAPBOX_TOKEN=your_mapbox_token
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd gringoX
+   cd gringo
    ```
 
 2. Install dependencies:
@@ -243,7 +243,7 @@ The application uses Socket.IO for real-time communication:
 
 ## 🧩 Progressive Web App
 
-GringoX is configured as a Progressive Web App, offering:
+Gringo is configured as a Progressive Web App, offering:
 - Offline functionality
 - Installation on home screen
 - Fast loading
@@ -286,4 +286,4 @@ This project is licensed under the ISC License.
 
 ## 👥 Authors
 
-- All contributors to the GringoX project
+- All contributors to the Gringo project

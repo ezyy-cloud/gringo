@@ -1,4 +1,4 @@
-# GringoX Stack
+# Gringo Stack
 
 ## Frontend (Client)
 

@@ -37,6 +37,10 @@ const MessageSchema = new mongoose.Schema({
     longitude: {
       type: Number,
       required: false
+    },
+    fuzzyLocation: {
+      type: Boolean,
+      default: true
     }
   },
   likes: [{
