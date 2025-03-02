@@ -6,9 +6,10 @@ import apiService from '../../services/apiService';
 import AvatarPlaceholder from '../AvatarPlaceholder';
 import { timeAgo } from '../../utils/dateUtils';
 import './ProfilePage.css';
-import { GoHeartFill, GoComment, GoLocation, GoSun, GoMoon, GoBell, GoBellSlash, GoCheck, GoInfo } from 'react-icons/go';
+import { GoHeartFill, GoComment, GoLocation, GoSun, GoMoon, GoBell, GoBellSlash, GoCheck, GoInfo, GoTrash } from 'react-icons/go';
 import socketService from '../../services/socketService';
 import { AppContext } from '../../context/AppContext';
+import { FaUserPlus, FaUserCheck, FaSignOutAlt } from 'react-icons/fa';
 
 // Add a list of predefined colors
 const profileCoverColors = [
@@ -641,6 +642,29 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
     }, 500);
   };
 
+  // Add a function to handle message deletion
+  const handleDeleteMessage = async (messageId) => {
+    if (!isCurrentUser) return;
+    
+    try {
+      const confirmed = window.confirm('Are you sure you want to delete this post? This action cannot be undone.');
+      if (!confirmed) return;
+      
+      const response = await apiService.deleteMessage(messageId);
+      if (response.success) {
+        // Update the local state to remove the deleted message
+        setUserMessages(prevMessages => prevMessages.filter(message => message._id !== messageId));
+        // Show success message
+        setSuccess('Post deleted successfully');
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (error) {
+      setError('Failed to delete post. Please try again.');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
   return (
     <div className={`profile-container ${isDarkMode ? 'dark-mode' : ''}`}>
       {error && <div className="profile-error">{error}</div>}
@@ -896,16 +920,28 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
                                     <div className="likes-count">
                                       <GoHeartFill className={`heart-icon ${message.likedByCurrentUser ? 'liked-by-user' : ''}`} /> {message.likesCount || 0}
                                     </div>
-                                    {message.location ? (
-                                      <button 
-                                        className="location-button"
-                                        onClick={() => alert(`Location: ${message.location.latitude.toFixed(6)}, ${message.location.longitude.toFixed(6)}`)}
-                                      >
-                                        <GoLocation className="location-icon" /> View Location
-                                      </button>
-                                    ) : (
-                                      <div className="location-placeholder"></div>
-                                    )}
+                                    <div className="message-action-buttons">
+                                      {message.location ? (
+                                        <button 
+                                          className="location-button"
+                                          onClick={() => alert(`Location: ${message.location.latitude.toFixed(6)}, ${message.location.longitude.toFixed(6)}`)}
+                                        >
+                                          <GoLocation className="location-icon" /> View Location
+                                        </button>
+                                      ) : (
+                                        <div className="location-placeholder"></div>
+                                      )}
+                                      
+                                      {isCurrentUser && (
+                                        <button 
+                                          className="delete-button"
+                                          onClick={() => handleDeleteMessage(message._id)}
+                                          aria-label="Delete post"
+                                        >
+                                          <GoTrash className="delete-icon" /> Delete
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               ))}

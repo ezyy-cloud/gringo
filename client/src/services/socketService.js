@@ -317,6 +317,12 @@ const socketService = {
     socket.on('newMessage', (data) => {
       console.log('⚡ Socket: Received new message:', data);
       if (callbacks.onNewMessage) callbacks.onNewMessage(data);
+      
+      // Check if the message is from a user being followed
+      // and process notification if needed
+      if (data.isFromFollowedUser) {
+        processNotification(data, callbacks);
+      }
     });
     
     // Listen for refresh messages signal
@@ -348,6 +354,11 @@ const socketService = {
       
       // Process notification with appropriate handling
       processNotification(data, callbacks);
+    });
+    
+    // Message deleted events
+    socket.on('messageDeleted', (data) => {
+      if (callbacks.onMessageDeleted) callbacks.onMessageDeleted(data);
     });
     
     // Connect to the server

@@ -144,6 +144,22 @@ const apiService = {
     return apiService.likeMessage(messageId);
   },
   
+  // Delete a message
+  deleteMessage: async (messageId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await api.delete(`/api/messages/${messageId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      throw error;
+    }
+  },
+  
   // Get total likes for a user
   getUserLikes: async (username) => {
     try {

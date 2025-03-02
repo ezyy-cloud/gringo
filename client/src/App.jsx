@@ -703,6 +703,19 @@ function App() {
             setMessagesTimestamp(Date.now());
           }
         }
+      },
+      onMessageDeleted: (data) => {
+        console.log('⚡ Socket: Message deleted', data);
+        
+        // Remove the deleted message from the messages list
+        if (data && data.messageId) {
+          setMessages(prevMessages => 
+            prevMessages.filter(msg => msg.dbId !== data.messageId)
+          );
+          
+          // Force a refresh of profile cards since a message was deleted
+          setMessagesTimestamp(Date.now());
+        }
       }
     };
     

@@ -1296,6 +1296,57 @@ app.get('/api/users/:username/liked-messages', cache(300), async (req, res) => {
   }
 });
 
+// Delete a message
+app.delete('/api/messages/:id', protect, async (req, res) => {
+  try {
+    const messageId = req.params.id;
+    const userId = req.user.id;
+
+    // Find the message
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ success: false, error: 'Message not found' });
+    }
+
+    // Check if the user is the owner of the message
+    if (message.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, error: 'Not authorized to delete this message' });
+    }
+
+    // Remove message from user's messages array
+    await User.findByIdAndUpdate(
+      userId,
+      { $pull: { messages: messageId } }
+    );
+
+    // Delete the message
+    await Message.findByIdAndDelete(messageId);
+
+    // Invalidate relevant cache entries
+    if (redisClient.isReady) {
+      // Invalidate user's messages cache and global messages cache
+      await invalidateCache([
+        `cache:/api/messages/${req.user.username}*`,
+        `cache:/api/messages?*`
+      ]);
+    }
+
+    // Broadcast message deletion event to all connected clients
+    io.emit('messageDeleted', {
+      messageId: messageId,
+      deletedByUsername: req.user.username
+    });
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Message deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    return res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Socket.IO event handling
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
