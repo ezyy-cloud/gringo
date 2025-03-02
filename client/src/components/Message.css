@@ -1,0 +1,242 @@
+.message {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 0;
+  border-bottom: 1px solid #eaeaea;
+  background-color: #fff;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.dark-mode .message {
+  background-color: var(--dark-background);
+  border-bottom: 1px solid var(--dark-border);
+}
+
+.message:hover {
+  background-color: #f8f9fa;
+}
+
+.dark-mode .message:hover {
+  background-color: var(--dark-hover);
+}
+
+/* Styling for messages that the current user has liked */
+.message.liked-message {
+  background-color: rgba(224, 36, 94, 0.05);
+  border-left: 3px solid rgba(224, 36, 94, 0.5);
+}
+
+.dark-mode .message.liked-message {
+  background-color: rgba(255, 77, 109, 0.07);
+  border-left: 3px solid rgba(255, 77, 109, 0.5);
+}
+
+.message.liked-message:hover {
+  background-color: rgba(224, 36, 94, 0.08);
+}
+
+.dark-mode .message.liked-message:hover {
+  background-color: rgba(255, 77, 109, 0.1);
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 10px;
+  object-fit: cover;
+}
+
+.message-sender-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.message-sender {
+  font-weight: 700;
+  color: #000;
+  text-decoration: none;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-sender {
+  color: var(--dark-text);
+}
+
+.message-sender:hover {
+  text-decoration: underline;
+}
+
+.message-timestamp {
+  font-size: 0.75rem;
+  color: #657786;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-timestamp {
+  color: var(--dark-secondary-text);
+}
+
+.message-content {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  word-break: break-word;
+  color: #14171a;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-content {
+  color: var(--dark-text);
+}
+
+.message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.message-location {
+  font-size: 0.75rem;
+  color: #657786;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-location {
+  color: var(--dark-secondary-text);
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.like-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 15px;
+  transition: all 0.2s ease;
+  font-size: 15px;
+  color: #657786;
+}
+
+.like-button svg {
+  font-size: 18px;
+}
+
+.heart-filled {
+  color: #e0245e;
+}
+
+.dark-mode .like-button {
+  color: var(--dark-secondary-text);
+}
+
+.like-button:hover {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: #e0245e;
+}
+
+.dark-mode .like-button:hover {
+  background-color: rgba(255, 0, 0, 0.15);
+}
+
+.like-button.liked {
+  color: #e0245e;
+}
+
+.like-count {
+  font-size: 13px;
+  margin-left: 2px;
+  color: inherit;
+  transition: color 0.3s ease;
+}
+
+.like-button.liked .like-count {
+  color: #e0245e;
+}
+
+.online-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 4px;
+  position: relative;
+  top: -1px;
+}
+
+/* System message styling */
+.message.system {
+  background-color: #f8f9fa;
+  border-left: none;
+  border-bottom: 1px solid #eaeaea;
+  padding: 10px 12px;
+}
+
+.message.system .message-content {
+  margin-left: 0;
+  font-style: italic;
+  color: #657786;
+}
+
+.message.system .message-header {
+  margin-bottom: 0;
+}
+
+.message.error {
+  background-color: #fff8f8;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.message.error .message-content {
+  color: #e0245e;
+}
+
+/* Media query for larger screens */
+@media (min-width: 768px) {
+  .message {
+    border-radius: 8px;
+    border: 1px solid #eaeaea;
+    border-bottom: 1px solid #eaeaea;
+    margin-bottom: 15px;
+  }
+}
+
+.message-image-container {
+  margin-bottom: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 400px;
+}
+
+.message-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+  margin: 0 auto;
+  border-radius: 12px;
+} 

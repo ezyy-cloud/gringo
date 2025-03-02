@@ -1,0 +1,390 @@
+/* Base styles */
+:root {
+  --primary-color: #1da1f2;
+  --secondary-color: #657786;
+  --background-color: #f5f8fa;
+  --lighter-gray: #e1e8ed;
+  --light-gray: #aab8c2;
+  --dark-gray: #657786;
+  --text-color: #14171a;
+  --border-radius: 12px;
+  --header-height: 64px;
+  --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  
+  /* Dark mode colors */
+  --dark-background: #15202b;
+  --dark-card-bg: #192734;
+  --dark-border: #38444d;
+  --dark-text: #ffffff;
+  --dark-secondary-text: #8899a6;
+  --dark-hover: #22303c;
+  --dark-box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  font-size: 16px;
+  line-height: 1.5;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  text-rendering: optimizeSpeed;
+}
+
+/* Dark mode styles */
+body.dark-mode {
+  --background-color: var(--dark-background);
+  --text-color: var(--dark-text);
+  --lighter-gray: var(--dark-border);
+  background-color: var(--dark-background);
+  color: var(--dark-text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Header styles */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  background-color: white;
+  border-bottom: 1px solid var(--lighter-gray);
+  z-index: 950;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+body.dark-mode .app-header {
+  background-color: var(--dark-card-bg);
+  border-bottom: 1px solid var(--dark-border);
+}
+
+.app-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  flex-grow: 1;
+  text-align: left;
+  margin-left: 15px;
+  color: var(--text-color);
+  transition: color 0.3s ease;
+}
+
+body.dark-mode .app-header h1 {
+  color: var(--dark-text);
+}
+
+/* Header actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  min-width: 50px;
+  position: relative;
+}
+
+/* Specific styling for notification bell in header */
+.header-actions .notification-bell-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Back button styles */
+.back-button {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  color: var(--primary-color);
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  margin-right: 8px;
+  transition: background-color 0.3s ease;
+  will-change: transform;
+}
+
+.back-button:hover {
+  background-color: rgba(29, 161, 242, 0.1);
+}
+
+body.dark-mode .back-button:hover {
+  background-color: rgba(29, 161, 242, 0.2);
+}
+
+/* Menu styles */
+.menu-container {
+  position: relative;
+  margin-left: 8px;
+}
+
+.menu-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+  will-change: transform;
+}
+
+.menu-button:hover {
+  background-color: rgba(29, 161, 242, 0.1);
+}
+
+body.dark-mode .menu-button:hover {
+  background-color: rgba(29, 161, 242, 0.2);
+}
+
+.menu-dots {
+  font-size: 24px;
+  color: var(--primary-color);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 200px;
+  background-color: #fff;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  z-index: 1000;
+  display: none;
+  overflow: hidden;
+  transition: background-color 0.3s ease;
+}
+
+body.dark-mode .dropdown-menu {
+  background-color: var(--dark-card-bg);
+  box-shadow: var(--dark-box-shadow);
+}
+
+.dropdown-menu.show {
+  display: block;
+}
+
+.dropdown-item {
+  display: block;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: var(--text-color);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body.dark-mode .dropdown-item {
+  color: var(--dark-text);
+}
+
+.dropdown-item:hover {
+  background-color: var(--background-color);
+}
+
+body.dark-mode .dropdown-item:hover {
+  background-color: var(--dark-hover);
+}
+
+/* Connection error */
+.connection-error {
+  padding: 8px 16px;
+  background-color: #ffebee;
+  color: #c62828;
+  text-align: center;
+  font-size: 14px;
+  width: 100%;
+}
+
+body.dark-mode .connection-error {
+  background-color: rgba(198, 40, 40, 0.2);
+  color: #ff8a80;
+}
+
+/* Main content */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  padding-top: var(--header-height);
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 18px;
+  color: var(--dark-gray);
+  transition: color 0.3s ease;
+}
+
+body.dark-mode .loading {
+  color: var(--dark-secondary-text);
+}
+
+/* Message input form */
+.message-input-form {
+  z-index: 800;
+  position: relative;
+}
+
+/* Ensure there's a way to input messages on mobile */
+@media (max-width: 768px) {
+  .message-input-form {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: var(--background-color);
+    padding: 10px;
+    border-top: 1px solid var(--lighter-gray);
+    display: flex;
+    transition: transform 0.3s ease;
+    transform: translateY(100%);
+  }
+
+  .message-input-form.visible {
+    transform: translateY(0);
+  }
+
+  body.dark-mode .message-input-form {
+    background-color: var(--dark-card-bg);
+    border-top: 1px solid var(--dark-border);
+  }
+}
+
+/* Floating Action Button */
+.floating-action-button {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #4a90e2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s;
+  z-index: 900;
+  border: none;
+  font-size: 24px;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.floating-action-button svg {
+  fill: white;
+  font-size: 24px;
+}
+
+.floating-action-button:hover {
+  transform: scale(1.05);
+  background-color: #3a7bc8;
+}
+
+body.dark-mode .floating-action-button {
+  background-color: #2d7dd2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .floating-action-button:hover {
+  background-color: #1a6cbd;
+}
+
+.floating-action-button:active {
+  transform: scale(0.95);
+}
+
+/* Dropdown icons */
+.dropdown-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+/* Media queries - consolidated */
+@media (min-width: 768px) {
+  .app {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  
+  .app-header h1 {
+    font-size: 24px;
+  }
+  
+  .app-main {
+    padding: 0 24px 24px;
+  }
+
+  /* In desktop views, show the regular form and adjust FAB */
+  .message-input-form {
+    display: block;
+  }
+
+  .floating-action-button {
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+}

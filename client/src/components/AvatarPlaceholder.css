@@ -1,0 +1,25 @@
+.avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: white;
+  font-weight: bold;
+  -webkit-user-select: none;
+  user-select: none;
+  text-transform: uppercase;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.avatar-placeholder:hover {
+  transform: scale(1.05);
+}
+
+/* Responsive sizing */
+@media (max-width: 768px) {
+  .avatar-placeholder {
+    font-size: 14px;
+  }
+} 

@@ -1,0 +1,395 @@
+.message-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.message-modal {
+  background-color: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 5px 30px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.message-modal.dark-mode {
+  background-color: var(--dark-card-bg);
+  color: var(--dark-text);
+}
+
+.message-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #eaeaea;
+  transition: border-color 0.3s ease;
+}
+
+.dark-mode .message-modal-header {
+  border-bottom: 1px solid var(--dark-border);
+}
+
+.message-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-modal-header h3 {
+  color: var(--dark-text);
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .close-button {
+  color: var(--dark-secondary-text);
+}
+
+.message-modal-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.message-input-container {
+  position: relative;
+  width: 100%;
+  margin-bottom: 15px;
+}
+
+.message-modal-input {
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 16px;
+  resize: none;
+  min-height: 100px;
+  font-family: inherit;
+  background-color: white;
+  color: #333;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  padding-bottom: 30px; /* Make room for the counter */
+}
+
+.dark-mode .message-modal-input {
+  border-color: var(--dark-border);
+  background-color: var(--dark-input-bg);
+  color: var(--dark-text);
+}
+
+.message-modal-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.char-counter {
+  position: absolute;
+  bottom: 5px;
+  right: 10px;
+  font-size: 14px;
+  color: #888;
+  background-color: transparent;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+  transition: color 0.2s ease;
+}
+
+.dark-mode .char-counter {
+  color: var(--dark-secondary-text);
+}
+
+.char-counter.warning {
+  color: #f0ad4e;
+}
+
+.dark-mode .char-counter.warning {
+  color: #ffc107;
+}
+
+.char-counter.danger {
+  color: #dc3545;
+  animation: pulse 1s infinite;
+}
+
+.dark-mode .char-counter.danger {
+  color: #ff6b6b;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.message-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.send-button, .cancel-button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.send-button {
+  background-color: #4a90e2;
+  color: white;
+}
+
+.send-button:hover {
+  background-color: #3a7bc8;
+}
+
+.send-button:disabled {
+  background-color: #a5c7f0;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  background-color: #f1f1f1;
+  color: #666;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark-mode .cancel-button {
+  background-color: var(--dark-card-bg);
+  color: var(--dark-secondary-text);
+  border: 1px solid var(--dark-border);
+}
+
+.cancel-button:hover {
+  background-color: #e1e1e1;
+}
+
+.dark-mode .cancel-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Round Send Button */
+.send-button-round {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #4a90e2;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  font-size: 18px;
+}
+
+.send-button-round svg {
+  fill: white;
+}
+
+.send-button-round:hover {
+  transform: scale(1.05);
+  background-color: #3a7bc8;
+}
+
+.send-button-round:active {
+  transform: scale(0.95);
+}
+
+.send-button-round.disabled {
+  background-color: var(--light-gray);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.dark-mode .send-button-round {
+  background-color: #2d7dd2;
+}
+
+.dark-mode .send-button-round:hover {
+  background-color: #1a6cbd;
+}
+
+/* Floating Action Button */
+.floating-action-button {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #4a90e2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s, color 0.2s;
+  z-index: 900;
+  border: none;
+  font-size: 24px;
+}
+
+.floating-action-button svg {
+  fill: white;
+  font-size: 24px;
+}
+
+.floating-action-button.dark-mode {
+  background-color: #2d7dd2;
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.floating-action-button:hover {
+  transform: scale(1.05);
+  background-color: #3a7bc8;
+}
+
+.floating-action-button.dark-mode:hover {
+  background-color: #1a6cbd;
+}
+
+.floating-action-button:active {
+  transform: scale(0.95);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.image-preview-container {
+  position: relative;
+  width: 100%;
+  margin-bottom: 15px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-preview {
+  width: 100%;
+  display: block;
+  max-height: 300px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.remove-image-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.camera-button-container {
+  width: 100%;
+  margin-bottom: 15px;
+  display: flex;
+  justify-content: center;
+}
+
+.camera-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background-color: #f1f1f1;
+  border: 1px dashed #ccc;
+  border-radius: 8px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.dark-mode .camera-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--dark-border);
+  color: var(--dark-text);
+}
+
+.camera-button:hover {
+  background-color: #e7e7e7;
+  border-color: #aaa;
+}
+
+.dark-mode .camera-button:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--dark-text);
+}
+
+.camera-button span {
+  font-weight: 500;
+}
