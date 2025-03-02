@@ -450,6 +450,11 @@ const createNotification = (data) => {
   };
 };
 
+// Function to check if the device is iOS (iPhone, iPad, iPod)
+const isIOS = () => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+};
+
 function App() {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -503,18 +508,66 @@ function App() {
     
     // Function to get user's location
     const getUserLocation = () => {
+      console.log("Attempting to get user location");
+      
       if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            handleGeolocationSuccess(position, setUserLocation);
-          },
-          (error) => {
-            
-            // Only set fallback location if we don't already have a location
-            setUserLocation(prevLocation => handleLocationFallback(prevLocation));
-          }
-        );
+        console.log("Geolocation is supported");
+        
+        const geoOptions = {
+          enableHighAccuracy: true,
+          timeout: isIOS() ? 20000 : 10000, // Longer timeout for iOS
+          maximumAge: 0
+        };
+        
+        console.log("Device is iOS:", isIOS());
+        console.log("Using geolocation options:", geoOptions);
+        
+        // Force permission prompt on iOS by calling watchPosition first,
+        // then immediately clearing it, before calling getCurrentPosition
+        if (isIOS()) {
+          console.log("Using iOS-specific approach...");
+          const watchId = navigator.geolocation.watchPosition(
+            () => {
+              console.log("watchPosition succeeded (iOS)");
+              navigator.geolocation.clearWatch(watchId);
+              
+              // Now call getCurrentPosition after permissions granted
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  console.log("getCurrentPosition succeeded after watchPosition");
+                  handleGeolocationSuccess(position, setUserLocation);
+                },
+                (error) => {
+                  console.error("getCurrentPosition error after watchPosition:", error);
+                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+                },
+                geoOptions
+              );
+            },
+            (error) => {
+              console.error("watchPosition error (iOS):", error);
+              navigator.geolocation.clearWatch(watchId);
+              setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+            },
+            geoOptions
+          );
+        } else {
+          // Non-iOS devices - use standard approach
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log("getCurrentPosition succeeded");
+              handleGeolocationSuccess(position, setUserLocation);
+            },
+            (error) => {
+              console.error("getCurrentPosition error:", error);
+              // Only set fallback location if we don't already have a location
+              setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+            },
+            geoOptions
+          );
+        }
       } else {
+        console.warn("Geolocation is NOT supported by this browser");
         // Browser doesn't support geolocation, use fallback
         setUserLocation(prevLocation => handleLocationFallback(prevLocation));
       }
@@ -523,12 +576,25 @@ function App() {
     // Get location initially
     getUserLocation();
     
-    // Update location every 2 minutes
-    const locationInterval = setInterval(getUserLocation, 2 * 60 * 1000);
+    // Update location on different intervals based on device type
+    // iOS devices need more frequent attempts to ensure permissions are accepted
+    const intervalTime = isIOS() ? 1 * 60 * 1000 : 2 * 60 * 1000; // 1 min for iOS, 2 mins for others
+    const locationInterval = setInterval(getUserLocation, intervalTime);
     
-    // Clean up interval on component unmount
+    // Setup visibility change listener to request location when app comes back to foreground
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("App in foreground, requesting location");
+        getUserLocation();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Clean up interval and event listener on component unmount
     return () => {
       clearInterval(locationInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []); // Empty dependency array means this runs only once on mount
 
