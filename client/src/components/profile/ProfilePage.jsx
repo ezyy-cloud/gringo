@@ -1037,7 +1037,13 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
                                       />
                                     )}
                                     <div className="message-author-info">
-                                      <span className="message-author">{message.author.username}</span>
+                                      <span 
+                                        className="message-author"
+                                        onClick={() => navigate(`/profile/${message.author.username}`)}
+                                        style={{ cursor: 'pointer' }}
+                                      >
+                                        {message.author.username}
+                                      </span>
                                     </div>
                                     <span className="message-timestamp-right">{timeAgo(message.createdAt)}</span>
                                   </div>
