@@ -264,6 +264,7 @@ const AppContent = ({
       <Routes>
         <Route path="/profile" element={<ProfilePage user={user} onlineUsers={onlineUsers} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
         <Route path="/profile/:username" element={<ProfilePage onlineUsers={onlineUsers} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
+        <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="/" element={
           <>
             <main className="app-main">
