@@ -62,12 +62,13 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
   
   // Form fields
   const [formData, setFormData] = useState({
-    username: userProp?.username || '',
-    email: userProp?.email || '',
-    profilePicture: userProp?.profilePicture || '',
-    coverColor: userProp?.coverColor || '#1da1f2', // Default to Twitter blue if not set
-    bio: userProp?.bio || 'Just another gringo', // Add bio with default value
-    darkMode: userProp?.darkMode || false // Add darkMode with default value
+    username: userProp?.username ?? '',
+    email: userProp?.email ?? '',
+    profilePicture: userProp?.profilePicture ?? '',
+    coverColor: userProp?.coverColor ?? '#1da1f2',
+    bio: userProp?.bio ?? 'Just another gringo',
+    darkMode: userProp?.darkMode ?? false,
+    geolocationEnabled: userProp?.geolocationEnabled ?? false
   });
 
   // Function to fetch user messages (memoized to prevent dependency issues)
@@ -161,7 +162,8 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
         profilePicture: userProp.profilePicture || '',
         coverColor: userProp.coverColor || '#1da1f2',
         bio: userProp.bio || 'Just another gringo',
-        darkMode: userProp.darkMode || false
+        darkMode: userProp.darkMode || false,
+        geolocationEnabled: userProp.geolocationEnabled || false
       });
       setIsCurrentUser(true);
       return;
@@ -181,7 +183,8 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
             profilePicture: result.data.user.profilePicture || '',
             coverColor: result.data.user.coverColor || '#1da1f2',
             bio: result.data.user.bio || 'Just another gringo',
-            darkMode: result.data.user.darkMode || false
+            darkMode: result.data.user.darkMode || false,
+            geolocationEnabled: result.data.user.geolocationEnabled || false
           });
           setIsCurrentUser(true);
         }
@@ -346,7 +349,8 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
       profilePicture: user.profilePicture || '',
       coverColor: user.coverColor || '#1da1f2',
       bio: user.bio || 'Just another gringo',
-      darkMode: user.darkMode || false
+      darkMode: user.darkMode || false,
+      geolocationEnabled: user.geolocationEnabled || false
     });
     setIsEditing(false);
     setError(null);
@@ -582,86 +586,251 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
     }
   };
 
-  // Request notification permission function
-  const requestNotificationPermission = async (e) => {
-    // Prevent the default toggle behavior since notifications require browser prompts
-    if (e) e.preventDefault();
-    
-    try {
-      // If notifications are already enabled, just show a message
-      if (notificationEnabled) {
-        setError('Notifications are already enabled. To disable, use your browser settings.');
-        clearMessages();
+  // Effect to check and update notification status on mount and permission changes
+  useEffect(() => {
+    const checkNotificationStatus = async () => {
+      // Check if notifications are supported
+      if (!('Notification' in window)) {
+        setNotificationEnabled(false);
         return;
       }
+
+      // Function to update state based on permission
+      const updateNotificationState = () => {
+        const permission = Notification.permission;
+        setNotificationEnabled(permission === 'granted');
+      };
+
+      // Initial state update
+      updateNotificationState();
+
+      // Set up permission change monitoring
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'notifications' });
+        permissionStatus.addEventListener('change', () => {
+          updateNotificationState();
+        });
+
+        return () => {
+          permissionStatus.removeEventListener('change', updateNotificationState);
+        };
+      } catch (error) {
+        // Fallback for browsers that don't support permission.query for notifications
+        // Set up periodic checking
+        const checkInterval = setInterval(() => {
+          updateNotificationState();
+        }, 1000);
+
+        return () => clearInterval(checkInterval);
+      }
+    };
+
+    checkNotificationStatus();
+  }, []);
+
+  // Effect to check and update geolocation status on mount and permission changes
+  useEffect(() => {
+    const checkGeolocationStatus = async () => {
+      try {
+        // Check if geolocation is supported
+        if (!('geolocation' in navigator)) {
+          setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+          return;
+        }
+
+        // Function to update state based on permission
+        const updateGeolocationState = async (permissionState) => {
+          const isEnabled = permissionState === 'granted';
+          
+          // Only update if the state is different from current
+          setFormData(prev => {
+            if (prev.geolocationEnabled !== isEnabled) {
+              // If permission is denied, update the user's preference in the database
+              if (!isEnabled && user?.geolocationEnabled) {
+                authService.updateProfile({ geolocationEnabled: false })
+                  .then(() => {
+                    setUser(prev => ({
+                      ...prev,
+                      geolocationEnabled: false
+                    }));
+                  })
+                  .catch(console.error);
+              }
+              return { ...prev, geolocationEnabled: isEnabled };
+            }
+            return prev;
+          });
+        };
+
+        // Set up permission monitoring
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        
+        // Initial state update
+        updateGeolocationState(permissionStatus.state);
+
+        // Listen for permission changes
+        permissionStatus.addEventListener('change', () => {
+          updateGeolocationState(permissionStatus.state);
+        });
+
+        return () => {
+          permissionStatus.removeEventListener('change', () => {
+            updateGeolocationState(permissionStatus.state);
+          });
+        };
+      } catch (error) {
+        console.error('Error checking geolocation status:', error);
+        setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+      }
+    };
+
+    checkGeolocationStatus();
+  }, [user]);
+
+  // Request notification permission function
+  const handleToggleNotifications = async (e) => {
+    try {
+      const newNotificationEnabled = e?.target?.checked !== undefined ? e.target.checked : !notificationEnabled;
       
-      const granted = await socketService.requestNotificationPermission();
-      if (granted) {
-        setSuccess('Notifications enabled successfully!');
-        setNotificationEnabled(true);
+      if (newNotificationEnabled) {
+        // Check if notifications are supported
+        if (!('Notification' in window)) {
+          setError('Notifications are not supported in your browser.');
+          setNotificationEnabled(false);
+          clearMessages();
+          return;
+        }
+
+        // Request permission
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+          setNotificationEnabled(true);
+          setSuccess('Notifications enabled successfully!');
+          
+          // Test notification
+          const notification = new Notification('Notifications Enabled', {
+            body: 'You will now receive notifications from GringoX',
+            icon: '/logo.png'
+          });
+
+          // Close the test notification after 3 seconds
+          setTimeout(() => notification.close(), 3000);
+        } else {
+          setNotificationEnabled(false);
+          if (permission === 'denied') {
+            setError('Please enable notifications in your browser settings to use this feature.');
+          } else {
+            setError('Notification permission was not granted.');
+          }
+        }
       } else {
-        setError('Please enable notifications in your browser settings to receive alerts.');
-        setNotificationEnabled(false);
+        // If user is trying to disable notifications
+        if (Notification.permission === 'granted') {
+          setError('To disable notifications completely, please use your browser settings. The toggle will remain enabled while browser permissions are granted.');
+          setNotificationEnabled(true);
+        } else {
+          setNotificationEnabled(false);
+        }
       }
 
       clearMessages();
     } catch (error) {
-      
-      setError('Error enabling notifications. Please try again.');
+      console.error('Error toggling notifications:', error);
+      setError('An error occurred while updating notification settings.');
       clearMessages();
     }
   };
 
-  // Show instructions for disabling notifications
-  const showNotificationDisableInstructions = (e) => {
-    if (e) e.preventDefault();
-    setSuccess('To disable notifications, click the lock icon in your browser address bar, then find site permissions.');
-    clearMessages();
-  };
-
-  // Function to load more liked messages
-  const handleLoadMoreLikedMessages = () => {
-    if (!window.allLikedMessages || isLoadingMoreLikedMessages) return;
-    
-    setIsLoadingMoreLikedMessages(true);
-    
-    // Simulate API call delay
-    setTimeout(() => {
-      const nextPage = likedMessagesPage + 1;
-      const startIndex = 0;
-      const endIndex = nextPage * messagesPerPage;
-      
-      // Get next page of liked messages from our stored array
-      const nextPageMessages = window.allLikedMessages.slice(startIndex, endIndex);
-      
-      // Make sure the messages maintain their likedByCurrentUser flag
-      setLikedMessages(nextPageMessages);
-      setLikedMessagesPage(nextPage);
-      setHasMoreLikedMessages(window.allLikedMessages.length > endIndex);
-      setIsLoadingMoreLikedMessages(false);
-    }, 500);
-  };
-
-  // Add a function to handle message deletion
-  const handleDeleteMessage = async (messageId) => {
-    if (!isCurrentUser) return;
-    
+  // Toggle geolocation function
+  const handleToggleGeolocation = async (e) => {
     try {
-      const confirmed = window.confirm('Are you sure you want to delete this post? This action cannot be undone.');
-      if (!confirmed) return;
+      const newGeolocationEnabled = e?.target?.checked !== undefined ? e.target.checked : !formData.geolocationEnabled;
       
-      const response = await apiService.deleteMessage(messageId);
-      if (response.success) {
-        // Update the local state to remove the deleted message
-        setUserMessages(prevMessages => prevMessages.filter(message => message._id !== messageId));
-        // Show success message
-        setSuccess('Post deleted successfully');
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(null), 3000);
+      if (newGeolocationEnabled) {
+        // Check if geolocation is supported
+        if (!('geolocation' in navigator)) {
+          setError('Geolocation is not supported in your browser.');
+          setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+          clearMessages();
+          return;
+        }
+
+        // Request geolocation permission
+        try {
+          const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+          
+          if (permissionStatus.state === 'denied') {
+            setError('Please enable location access in your browser settings.');
+            setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+            clearMessages();
+            return;
+          }
+
+          // Test geolocation access
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 0
+            });
+          });
+
+          // If we successfully got the position, update the state and user preferences
+          if (position) {
+            setFormData(prev => ({ ...prev, geolocationEnabled: true }));
+            
+            if (!isEditing) {
+              const response = await authService.updateProfile({ geolocationEnabled: true });
+              if (response.success) {
+                setSuccess('Location services enabled successfully!');
+                setUser(prev => ({
+                  ...prev,
+                  geolocationEnabled: true
+                }));
+              }
+            }
+          }
+        } catch (geoError) {
+          // Handle different error cases
+          let errorMessage = 'Could not access your location. ';
+          if (geoError.code === 1) {
+            errorMessage += 'Please enable location access in your browser settings.';
+          } else if (geoError.code === 2) {
+            errorMessage += 'Position is unavailable.';
+          } else if (geoError.code === 3) {
+            errorMessage += 'Request timed out.';
+          }
+          
+          setError(errorMessage);
+          setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+          if (!isEditing) {
+            await authService.updateProfile({ geolocationEnabled: false });
+          }
+          clearMessages();
+          return;
+        }
+      } else {
+        // User is trying to disable geolocation
+        setFormData(prev => ({ ...prev, geolocationEnabled: false }));
+        
+        if (!isEditing) {
+          const response = await authService.updateProfile({ geolocationEnabled: false });
+          if (response.success) {
+            setSuccess('Location services disabled successfully!');
+            setUser(prev => ({
+              ...prev,
+              geolocationEnabled: false
+            }));
+          }
+        }
       }
+
+      clearMessages();
     } catch (error) {
-      setError('Failed to delete post. Please try again.');
-      setTimeout(() => setError(null), 3000);
+      console.error('Error updating location settings:', error);
+      setError('An error occurred while updating location settings.');
+      clearMessages();
     }
   };
 
@@ -1206,33 +1375,45 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
                           </label>
                         </div>
                       </div>
+
+                      <div className="profile-setting-item">
+                        <span className="setting-label">Geolocation</span>
+                        <div className="toggle-switch">
+                          <input 
+                            type="checkbox" 
+                            checked={formData.geolocationEnabled}
+                            onChange={handleToggleGeolocation}
+                            id="geolocationToggle"
+                          />
+                          <label htmlFor="geolocationToggle" className="toggle-label">
+                            <span className="toggle-icon">
+                              <GoLocation />
+                            </span>
+                            <span className="toggle-text">
+                              {formData.geolocationEnabled ? 'Location Enabled' : 'Location Disabled'}
+                            </span>
+                          </label>
+                        </div>
+                      </div>
                       
                       <div className="profile-setting-item">
                         <span className="setting-label">Notifications</span>
-                        {notificationEnabled ? (
-                          <button 
-                            className="setting-action-btn notification-enabled" 
-                            onClick={showNotificationDisableInstructions}
-                            aria-label="Disable notifications"
-                          >
-                            <GoBell className="setting-icon" /> Disable in Browser
-                          </button>
-                        ) : (
-                          <div className="notification-controls">
-                            <div className="notification-badge disabled">
-                              <GoBellSlash className="badge-icon" />
-                              <GoInfo className="badge-status-icon" />
-                              <span className="badge-text">Browser Disabled</span>
-                            </div>
-                            <button 
-                              className="setting-action-btn" 
-                              onClick={requestNotificationPermission}
-                              aria-label="Enable notifications"
-                            >
-                              <GoBell className="setting-icon" /> Enable in Browser
-                            </button>
-                          </div>
-                        )}
+                        <div className="toggle-switch">
+                          <input
+                            type="checkbox"
+                            id="notification-toggle"
+                            checked={notificationEnabled}
+                            onChange={handleToggleNotifications}
+                          />
+                          <label htmlFor="notification-toggle" className="toggle-label">
+                            <span className="toggle-icon">
+                              {notificationEnabled ? <GoBell /> : <GoBellSlash />}
+                            </span>
+                            <span className="toggle-text">
+                              {notificationEnabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                     
@@ -1256,10 +1437,28 @@ const ProfilePage = ({ user: userProp, onlineUsers = {}, isDarkMode, toggleDarkM
 };
 
 ProfilePage.propTypes = {
-  user: PropTypes.object,
+  user: PropTypes.shape({
+    username: PropTypes.string,
+    email: PropTypes.string,
+    profilePicture: PropTypes.string,
+    coverColor: PropTypes.string,
+    bio: PropTypes.string,
+    darkMode: PropTypes.bool,
+    geolocationEnabled: PropTypes.bool,
+    followersCount: PropTypes.number,
+    followingCount: PropTypes.number,
+    isOnline: PropTypes.bool
+  }),
   onlineUsers: PropTypes.object,
   isDarkMode: PropTypes.bool,
   toggleDarkMode: PropTypes.func
+};
+
+ProfilePage.defaultProps = {
+  user: null,
+  onlineUsers: {},
+  isDarkMode: false,
+  toggleDarkMode: null
 };
 
 export default ProfilePage; 

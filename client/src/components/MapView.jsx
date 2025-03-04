@@ -417,8 +417,9 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
       {messagesWithLocation.length === 0 && (
         <div className={`no-location-messages ${isDarkMode ? 'dark-mode' : ''}`}>
-          <p>No messages with location data available.</p>
-          <p>Send a message to add a pin to the map!</p>
+          <GoLocation size={32} className="empty-state-icon" />
+          <p>The map is looking a bit empty!</p>
+          <p>Share whats happening around you to drop a pin!</p>
         </div>
       )}
     </div>

@@ -1516,12 +1516,12 @@ body[data-page="profile"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
 }
 
 .dark-mode .profile-setting-item {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-color: #2d2d2d;
 }
 
 .profile-setting-item:last-child {
@@ -1530,120 +1530,57 @@ body[data-page="profile"] {
 
 .setting-label {
   font-weight: 500;
-  font-size: 16px;
+  margin-right: 10px;
+  color: #333;
 }
 
-.setting-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: 1px solid #e1e1e1;
-  border-radius: 20px;
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
+.dark-mode .setting-label {
+  color: #e1e1e1;
 }
 
-.setting-action-btn.notification-enabled {
-  background-color: rgba(25, 135, 84, 0.15);
-  color: #198754;
-  border: 1px solid #28a745;
+/* Add a subtle hover effect */
+.toggle-label:hover {
+  opacity: 0.9;
 }
 
-.dark-mode .setting-action-btn {
-  border: 1px solid #444;
+/* Add focus styles for accessibility */
+.toggle-switch input:focus + .toggle-label {
+  box-shadow: 0 0 1px #1da1f2;
 }
 
-.dark-mode .setting-action-btn.notification-enabled {
-  background-color: rgba(40, 167, 69, 0.2);
-  color: #2ecc71;
-  border: 1px solid #28a745;
+.dark-mode .toggle-switch input:focus + .toggle-label {
+  box-shadow: 0 0 1px #4a90e2;
 }
 
-.setting-action-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+/* Add disabled state styles */
+.toggle-switch input:disabled + .toggle-label {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.setting-action-btn.notification-enabled:hover {
-  background-color: rgba(25, 135, 84, 0.25);
+/* Add a subtle scale animation when toggling */
+.toggle-label:before {
+  transform-origin: center;
+  transition: .4s transform, .4s background-color;
 }
 
-.dark-mode .setting-action-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.toggle-switch input:checked + .toggle-label:before {
+  transform: translateX(26px) scale(1.1);
 }
 
-.dark-mode .setting-action-btn.notification-enabled:hover {
-  background-color: rgba(40, 167, 69, 0.3);
+.toggle-switch input:not(:checked) + .toggle-label:before {
+  transform: translateX(0) scale(1.1);
 }
 
-.setting-icon {
-  font-size: 18px;
-}
-
-/* Toggle switch styles */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 140px;
-  height: 34px;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-label {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  background-color: #f0f0f0;
-  border-radius: 34px;
-  cursor: pointer;
-  transition: 0.4s;
-}
-
-.dark-mode .toggle-label {
-  background-color: #333;
+/* Add a subtle background pulse when toggling */
+@keyframes togglePulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; }
 }
 
 .toggle-switch input:checked + .toggle-label {
-  background-color: #2196F3;
-}
-
-.dark-mode .toggle-switch input:checked + .toggle-label {
-  background-color: #0D6EFD;
-}
-
-.toggle-icon {
-  display: flex;
-  align-items: center;
-  font-size: 18px;
-  z-index: 2;
-  color: #555;
-}
-
-.toggle-switch input:checked + .toggle-label .toggle-icon {
-  color: white;
-}
-
-.toggle-text {
-  margin-left: 8px;
-  font-size: 14px;
-  color: #555;
-}
-
-.toggle-switch input:checked + .toggle-label .toggle-text {
-  color: white;
+  animation: togglePulse 0.3s ease-in-out;
 }
 
 /* Notification badge and controls */
@@ -1796,4 +1733,77 @@ body[data-page="profile"] {
 
 .dark-mode .location-button:hover {
   background-color: rgba(74, 144, 226, 0.1);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+  margin-left: auto;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-label {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.toggle-label:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+.toggle-switch input:checked + .toggle-label {
+  background-color: #1da1f2;
+}
+
+.toggle-switch input:checked + .toggle-label:before {
+  transform: translateX(26px);
+}
+
+.dark-mode .toggle-label {
+  background-color: #4a4a4a;
+}
+
+.dark-mode .toggle-switch input:checked + .toggle-label {
+  background-color: #4a90e2;
+}
+
+.toggle-icon {
+  color: white;
+  font-size: 14px;
+  z-index: 1;
+  transition: .4s;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-text {
+  display: none;
 } 

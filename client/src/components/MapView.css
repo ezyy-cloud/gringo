@@ -286,16 +286,45 @@
   transform: translate(-50%, -50%);
   text-align: center;
   background-color: rgba(255, 255, 255, 0.9);
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  max-width: 300px;
+}
+
+.no-location-messages .empty-state-icon {
+  color: #4a90e2;
+  margin-bottom: 12px;
+  animation: bounce 2s infinite;
+}
+
+.no-location-messages p {
+  margin: 8px 0;
+  font-size: 1.1rem;
+  line-height: 1.4;
 }
 
 .dark-mode .no-location-messages {
-  background-color: rgba(25, 39, 52, 0.9);
+  background-color: rgba(25, 39, 52, 0.95);
   color: var(--dark-text);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .no-location-messages .empty-state-icon {
+  color: #6ba7e5;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
 }
 
 /* Map attribution and controls */
