@@ -542,53 +542,64 @@ function App() {
         
         const geoOptions = {
           enableHighAccuracy: true,
-          timeout: isIOS() ? 20000 : 10000, // Longer timeout for iOS
-          maximumAge: 0
+          timeout: isIOS() ? 30000 : 20000, // Increased timeout for both platforms
+          maximumAge: 30000 // Allow cached positions up to 30 seconds old
+        };
+
+        const fallbackGeoOptions = {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 60000 // Allow cached positions up to 1 minute old
         };
         
         console.log("Device is iOS:", isIOS());
         console.log("Using geolocation options:", geoOptions);
-        
-        // Force permission prompt on iOS by calling watchPosition first,
-        // then immediately clearing it, before calling getCurrentPosition
+
         if (isIOS()) {
-          console.log("Using iOS-specific approach...");
-          const watchId = navigator.geolocation.watchPosition(
-            () => {
-              console.log("watchPosition succeeded (iOS)");
-              navigator.geolocation.clearWatch(watchId);
-              
-              // Now call getCurrentPosition after permissions granted
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  console.log("getCurrentPosition succeeded after watchPosition");
-                  handleGeolocationSuccess(position, setUserLocation);
-                },
-                (error) => {
-                  console.error("getCurrentPosition error after watchPosition:", error);
-                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
-                },
-                geoOptions
-              );
-            },
-            (error) => {
-              console.error("watchPosition error (iOS):", error);
-              navigator.geolocation.clearWatch(watchId);
-              setUserLocation(prevLocation => handleLocationFallback(prevLocation));
-            },
-            geoOptions
-          );
-        } else {
-          // Non-iOS devices - use standard approach
+          // iOS-specific implementation
           navigator.geolocation.getCurrentPosition(
             (position) => {
               console.log("getCurrentPosition succeeded");
               handleGeolocationSuccess(position, setUserLocation);
             },
             (error) => {
-              console.error("getCurrentPosition error:", error);
-              // Only set fallback location if we don't already have a location
-              setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+              console.log("High accuracy position failed, trying low accuracy...");
+              // Try again with lower accuracy if high accuracy fails
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  console.log("Low accuracy position succeeded");
+                  handleGeolocationSuccess(position, setUserLocation);
+                },
+                (error) => {
+                  console.error("getCurrentPosition error:", error);
+                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+                },
+                fallbackGeoOptions
+              );
+            },
+            geoOptions
+          );
+        } else {
+          // Non-iOS devices - use same two-step approach
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log("getCurrentPosition succeeded");
+              handleGeolocationSuccess(position, setUserLocation);
+            },
+            (error) => {
+              console.log("High accuracy position failed, trying low accuracy...");
+              // Try again with lower accuracy if high accuracy fails
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  console.log("Low accuracy position succeeded");
+                  handleGeolocationSuccess(position, setUserLocation);
+                },
+                (error) => {
+                  console.error("getCurrentPosition error:", error);
+                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+                },
+                fallbackGeoOptions
+              );
             },
             geoOptions
           );
