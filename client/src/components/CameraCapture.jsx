@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Webcam from 'react-webcam';
-import { GoX, GoCheck, GoSync, GoDeviceCamera } from "react-icons/go";
+import { GoX, GoCheck, GoSync, GoDeviceCameraVideo } from "react-icons/go";
 import './CameraCapture.css';
 
 const FILTERS = [
@@ -458,7 +458,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
             <div className="camera-controls">
               <div className="spacer"></div>
               <button className="capture-btn" onClick={capture}>
-                <GoDeviceCamera size={32} />
+                <GoDeviceCameraVideo size={32} />
               </button>
               <button className="flip-camera" onClick={flipCamera}>
                 <GoSync size={24} />
