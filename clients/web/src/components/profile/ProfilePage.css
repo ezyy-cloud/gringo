@@ -1,0 +1,1840 @@
+/* Mobile-first Twitter/TikTok style profile page */
+.profile-container {
+  max-width: 100%;
+  margin: 0;
+  padding-top: var(--header-height); /* Add padding equal to the header height */
+  padding-bottom: 0;
+  padding-left: 0;
+  padding-right: 0;
+  background-color: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Hide navigation buttons when on profile page */
+  --hide-nav-buttons: 1;
+}
+
+/* Hide navigation menu button and notifications when on profile page */
+body[data-page="profile"] .menu-button,
+body[data-page="profile"] .notification-icon {
+  display: none !important;
+}
+
+/* Dark mode styles for profile container */
+.dark-mode.profile-container {
+  background-color: var(--dark-background);
+  color: var(--dark-text);
+}
+
+/* Profile's own header nav is no longer needed since we're using the app header */
+.profile-header-nav {
+  display: none; /* Hide the profile's header nav since we're using the app header */
+}
+
+.profile-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 15px;
+  margin: 10px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.dark-mode .profile-error {
+  background-color: rgba(114, 28, 36, 0.2);
+  color: #f8d7da;
+}
+
+.profile-success {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 15px;
+  margin: 10px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.dark-mode .profile-success {
+  background-color: rgba(21, 87, 36, 0.2);
+  color: #d4edda;
+}
+
+.profile-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1rem;
+  color: #1da1f2; /* Twitter blue */
+}
+
+/* Fix profile card margins */
+.profile-card {
+  padding: 0;
+  background-color: #fff;
+  border-radius: 0;
+  transition: background-color 0.3s ease;
+}
+
+.dark-mode .profile-card {
+  background-color: var(--dark-background);
+}
+
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 16px; /* Consistent horizontal padding */
+  margin-bottom: 0;
+}
+
+.profile-avatar-container {
+  position: absolute;
+  bottom: -60px; /* Half the height of the avatar to overlay it */
+  left: 16px; /* Consistent with other padding */
+  transform: none;
+  z-index: 5; /* Increase z-index to ensure visibility */
+  display: block;
+  width: 120px;
+  height: 120px;
+}
+
+/* Ensure the avatar is visible */
+.profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  background-color: #fff;
+  margin-bottom: 0;
+  display: block !important; /* Force display as block */
+  opacity: 1 !important; /* Ensure it's not hidden */
+  visibility: visible !important; /* Ensure it's visible */
+}
+
+.dark-mode .profile-avatar {
+  border-color: var(--dark-card-bg);
+}
+
+.profile-username {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding-left: 0; /* Reset any left padding */
+  gap: 12px; /* Add space between username and status badge */
+}
+
+.profile-username h2 {
+  margin: 0; /* Remove bottom margin to keep items aligned */
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #000;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .profile-username h2 {
+  color: var(--dark-text);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 0; /* Remove top margin to align with username */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.status-badge.online {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.dark-mode .status-badge.online {
+  background-color: rgba(46, 125, 50, 0.2);
+  color: #81c784;
+}
+
+.status-badge.offline {
+  background-color: #f5f5f5;
+  color: #757575;
+}
+
+.dark-mode .status-badge.offline {
+  background-color: rgba(117, 117, 117, 0.2);
+  color: #bdbdbd;
+}
+
+/* Replace with simplified follow button */
+.follow-button {
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 18px; /* Changed from 4px to 18px (half of the height) to make completely round */
+  border: 1px solid #1da1f2;
+  background-color: #1da1f2;
+  color: white;
+  min-width: 100px;
+  height: 36px;
+  /* Add flex properties for centering content */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative; /* For spinner positioning */
+}
+
+/* Spinner animation for loading state */
+.follow-button-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Specific spinner style for the "following" state button with transparent background */
+.follow-button.following .follow-button-spinner {
+  border: 2px solid rgba(29, 161, 242, 0.2);
+  border-top-color: #1da1f2;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dark-mode .follow-button-spinner {
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: white;
+}
+
+/* Dark mode spinner for "following" state */
+.dark-mode .follow-button.following .follow-button-spinner {
+  border: 2px solid rgba(74, 144, 226, 0.2);
+  border-top-color: #4a90e2;
+}
+
+.follow-button:hover:not(:disabled) {
+  background-color: #1a91da;
+}
+
+.follow-button.following {
+  background-color: transparent;
+  color: #1da1f2;
+}
+
+.follow-button.following:hover:not(:disabled) {
+  background-color: rgba(29, 161, 242, 0.1);
+}
+
+.follow-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.profile-stats {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 0; /* Slightly more vertical padding */
+  margin: 10px 0; /* Add vertical margins */
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+
+.stat {
+  flex: 1;
+  text-align: center;
+  padding: 0 10px; /* Reduce horizontal padding */
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-middle {
+  border-left: 1px solid #eee;
+  border-right: 1px solid #eee;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #657786;
+  text-transform: uppercase;
+}
+
+.dark-mode .profile-stats {
+  border-color: #333;
+}
+
+.dark-mode .stat-value {
+  color: var(--dark-text);
+}
+
+.dark-mode .stat-label {
+  color: var(--dark-secondary-text);
+}
+
+.dark-mode .stat-middle {
+  border-color: #333;
+}
+
+.profile-details {
+  margin: 0 0 10px; /* Reduce top and bottom margins */
+  padding: 0 16px; /* Consistent horizontal padding */
+}
+
+.profile-field {
+  display: flex;
+  margin-bottom: 0; /* Remove bottom margin */
+  font-size: 0.9rem;
+  padding: 5px 0;
+  transition: border-color 0.3s ease;
+}
+
+.dark-mode .profile-field {
+  border-color: var(--dark-border);
+}
+
+.profile-label {
+  font-weight: 600;
+  color: #657786;
+  width: auto; /* Make label width auto instead of fixed */
+  margin-right: 5px; /* Add a small right margin */
+  flex-shrink: 0;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .profile-label {
+  color: var(--dark-secondary-text);
+}
+
+.profile-value {
+  color: #14171a;
+  flex: 1;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .profile-value {
+  color: var(--dark-text);
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-button {
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background-color: #fff;
+  color: #1da1f2;
+  border: 1px solid #1da1f2;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dark-mode .edit-button {
+  background-color: var(--dark-card-bg);
+  color: #4a90e2;
+  border-color: #4a90e2;
+}
+
+.edit-button:hover {
+  background-color: rgba(29, 161, 242, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(29, 161, 242, 0.2);
+}
+
+.dark-mode .edit-button:hover {
+  background-color: rgba(29, 161, 242, 0.2);
+  box-shadow: 0 2px 5px rgba(74, 144, 226, 0.3);
+}
+
+.user-messages-section {
+  margin-top: 20px;
+}
+
+.user-messages-section h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eaeaea;
+  color: #000;
+  transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.dark-mode .user-messages-section h3 {
+  color: var(--dark-text);
+  border-bottom: 1px solid var(--dark-border);
+}
+
+.user-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-message-item {
+  padding: 12px;
+  border-radius: 8px;
+  background-color: #f7f9fa;
+  border-left: 3px solid #1da1f2;
+  transition: background-color 0.3s ease;
+}
+
+.dark-mode .user-message-item {
+  background-color: var(--dark-card-bg);
+  border-left: 3px solid #1a91da;
+}
+
+.message-content {
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+  color: #14171a;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .message-content {
+  color: var(--dark-text);
+}
+
+.message-meta {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: #657786;
+}
+
+.message-timestamp {
+  margin-bottom: 3px;
+}
+
+.message-location {
+  font-style: italic;
+}
+
+.no-messages {
+  text-align: center;
+  padding: 30px;
+  color: #657786;
+  font-style: italic;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin: 20px 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark-mode .no-messages {
+  color: var(--dark-secondary-text);
+  background-color: var(--dark-card-bg);
+}
+
+.loading-messages {
+  text-align: center;
+  padding: 20px;
+  color: #1da1f2;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .loading-messages {
+  color: #4a90e2;
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.load-more-button {
+  width: 100%;
+  padding: 10px;
+  background-color: #f5f8fa;
+  color: #1da1f2;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.dark-mode .load-more-button {
+  background-color: var(--dark-card-bg);
+  color: #4a90e2;
+}
+
+.load-more-button:hover {
+  background-color: #e8f5fd;
+}
+
+.dark-mode .load-more-button:hover {
+  background-color: rgba(29, 161, 242, 0.2);
+}
+
+.load-more-button:disabled {
+  background-color: #f5f8fa;
+  color: #aab8c2;
+  cursor: not-allowed;
+}
+
+.dark-mode .load-more-button:disabled {
+  background-color: var(--dark-card-bg);
+  color: var(--dark-secondary-text);
+}
+
+/* Profile edit form */
+.profile-form {
+  padding: 16px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-top: 10px;
+  transition: all 0.3s ease;
+}
+
+.dark-mode .profile-form {
+  background-color: var(--dark-card-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.form-group {
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #657786;
+  transition: color 0.3s ease;
+}
+
+.dark-mode .form-group label {
+  color: #8899a6;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #cfd9de;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+  background-color: #fff;
+  color: #14171a;
+}
+
+.dark-mode .form-group input,
+.dark-mode .form-group textarea {
+  background-color: var(--dark-card-bg);
+  border-color: var(--dark-border);
+  color: var(--dark-text);
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: #1da1f2;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(29, 161, 242, 0.2);
+}
+
+.dark-mode .form-group input:focus,
+.dark-mode .form-group textarea:focus {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.form-group textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.profile-preview {
+  display: block;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  margin: 15px auto;
+  object-fit: cover;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.dark-mode .profile-preview {
+  border-color: var(--dark-card-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.profile-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .profile-form-actions {
+  border-top-color: rgba(255, 255, 255, 0.05);
+}
+
+.save-button {
+  padding: 10px 24px;
+  background-color: #1da1f2;
+  color: white;
+  border: none;
+  border-radius: 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dark-mode .save-button {
+  background-color: #4a90e2;
+}
+
+.save-button:hover {
+  background-color: #1a91da;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(29, 161, 242, 0.3);
+}
+
+.dark-mode .save-button:hover {
+  background-color: #2d7dd2;
+  box-shadow: 0 3px 8px rgba(74, 144, 226, 0.3);
+}
+
+.save-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(29, 161, 242, 0.3);
+}
+
+.cancel-button {
+  padding: 10px 24px;
+  background-color: transparent;
+  color: #657786;
+  border: 1px solid #cfd9de;
+  border-radius: 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dark-mode .cancel-button {
+  background-color: transparent;
+  color: var(--dark-secondary-text);
+  border-color: var(--dark-border);
+}
+
+.cancel-button:hover {
+  background-color: #f5f8fa;
+  color: #14171a;
+  transform: translateY(-1px);
+}
+
+.dark-mode .cancel-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--dark-text);
+}
+
+.cancel-button:active {
+  transform: translateY(0);
+}
+
+/* Color Picker Styles */
+.color-picker-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.color-picker {
+  width: 50px;
+  height: 50px;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.color-picker:hover {
+  transform: scale(1.05);
+}
+
+.color-value {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #657786;
+  background-color: #f5f8fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.dark-mode .color-value {
+  color: var(--dark-secondary-text);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.cover-preview {
+  width: 100%;
+  height: 80px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  color: white;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.dark-mode .cover-preview {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Color Palette Styles */
+.color-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.color-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.color-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #1da1f2, 0 0 0 4px rgba(29, 161, 242, 0.3);
+}
+
+.dark-mode .color-swatch.selected {
+  box-shadow: 0 0 0 2px #4a90e2, 0 0 0 4px rgba(74, 144, 226, 0.3);
+}
+
+/* Profile bio */
+.profile-bio {
+  padding: 12px 16px; /* Add consistent padding */
+  margin-top: 5px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.profile-bio p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #657786;
+}
+
+.dark-mode .profile-bio p {
+  color: #ddd;
+}
+
+/* For apps that use a separate header component, ensure nav buttons are hidden */
+/* Target common class names for navigation elements */
+.app-header .menu-button,
+.app-header .navbar-burger,
+.app-header .notification-bell,
+.app-header .notification-icon,
+header .menu-btn,
+header .notifications-btn,
+nav .menu-toggle,
+nav .notifications {
+  display: var(--hide-nav-display, block) !important;
+}
+
+body[data-page="profile"] {
+  --hide-nav-display: none;
+}
+
+/* Media query for larger screens */
+@media (min-width: 768px) {
+  .profile-container {
+    max-width: 960px; /* Increased from 768px to match map view width */
+    width: 100%;
+    margin: 0 auto;
+    border-left: 1px solid #eaeaea;
+    border-right: 1px solid #eaeaea;
+  }
+  
+  .profile-card {
+    padding: 0;
+    width: 100%;
+  }
+  
+  .profile-cover {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    border-radius: 0;
+  }
+  
+  /* Timeline adjustments for larger screens */
+  .user-messages-list.instagram-style,
+  .top-liked-messages.instagram-style {
+    margin: 0 auto;
+    width: 80%; /* Centrally placed with fixed width */
+    max-width: 600px; /* Limit maximum width to match content area */
+    border-radius: 8px;
+    overflow: hidden; /* Keep the rounded corners contained */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .dark-mode .user-messages-list.instagram-style,
+  .dark-mode .top-liked-messages.instagram-style {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Center the message content */
+  .user-message-item.facebook-style,
+  .top-liked-message.facebook-style {
+    margin: 0 auto;
+    width: 100%;
+  }
+  
+  /* Make message content area match card width */
+  .message-content-square {
+    aspect-ratio: 1/1;
+    width: 100%;
+    max-height: none;
+    box-sizing: border-box;
+  }
+  
+  .tab-content {
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .user-messages-section,
+  .profile-top-liked {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .user-message-item.facebook-style:first-child,
+  .top-liked-message.facebook-style:first-child {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+  }
+  
+  .user-message-item.facebook-style:last-child,
+  .top-liked-message.facebook-style:last-child {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+  }
+  
+  /* Load more button should match timeline width */
+  .load-more-container {
+    width: 80%;
+    max-width: 600px;
+  }
+}
+
+/* Extra large screens */
+@media (min-width: 1200px) {
+  .profile-container {
+    max-width: 1140px; /* Standard bootstrap XL container width */
+  }
+  
+  /* Keep consistent width on larger screens */
+  .user-messages-list.instagram-style,
+  .top-liked-messages.instagram-style {
+    width: 70%; /* Slightly narrower on very large screens */
+    max-width: 700px; /* But with a higher maximum width */
+  }
+  
+  /* Load more button should match timeline width */
+  .load-more-container {
+    width: 70%;
+    max-width: 700px;
+  }
+}
+
+/* Enhanced navigation elements */
+.profile-nav {
+  display: flex;
+  border-bottom: 1px solid #eaeaea;
+  margin-bottom: 15px;
+  transition: border-color 0.3s ease;
+}
+
+.dark-mode .profile-nav {
+  border-color: var(--dark-border);
+}
+
+.profile-nav-button {
+  padding: 10px 15px;
+  background: none;
+  border: none;
+  color: #657786;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.dark-mode .profile-nav-button {
+  color: var(--dark-secondary-text);
+}
+
+.profile-nav-button:hover {
+  color: #1da1f2;
+}
+
+.profile-nav-button.active {
+  color: #1da1f2;
+  border-bottom: 2px solid #1da1f2;
+}
+
+.dark-mode .profile-nav-button.active {
+  color: #4a90e2;
+  border-bottom: 2px solid #4a90e2;
+}
+
+/* Top Liked Messages */
+.profile-top-liked {
+  margin-top: 0;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0;
+  padding: 16px;
+  color: #1c1e21;
+}
+
+.dark-mode .section-title {
+  color: #e4e6eb;
+}
+
+.top-liked-messages.instagram-style {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background-color: #f0f2f5;
+  margin: 0 auto; /* Center the messages instead of using negative margins */
+  width: 100%; /* Use full width of container */
+}
+
+.dark-mode .top-liked-messages.instagram-style {
+  background-color: #18191a;
+}
+
+.top-liked-message.facebook-style {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  background-color: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transform: none;
+}
+
+.top-liked-message.facebook-style:hover {
+  transform: none;
+}
+
+.dark-mode .top-liked-message.facebook-style {
+  background-color: #242526;
+}
+
+.likes-count {
+  display: flex;
+  align-items: center;
+  color: #1877f2;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-grow: 1;
+  margin-left: 8px; /* Add left margin for more comfortable spacing */
+}
+
+.dark-mode .likes-count {
+  color: #4a90e2;
+}
+
+.heart-icon {
+  font-size: 1.1rem;
+  margin-right: 5px;
+  color: #f25268;
+  opacity: 0.6; /* Default opacity is lower */
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.heart-icon.liked-by-user {
+  opacity: 1; /* Full opacity for liked messages */
+  color: #e0245e; /* Brighter red for liked messages */
+  animation: heart-pulse 0.5s ease-in-out; /* Add a small animation when first seen */
+}
+
+@keyframes heart-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Ensure consistent spacing */
+.user-messages-section .no-messages,
+.profile-top-liked .no-messages {
+  margin: 0;
+  padding: 20px;
+  border-radius: 0;
+  text-align: center;
+  background-color: white;
+}
+
+.dark-mode .user-messages-section .no-messages,
+.dark-mode .profile-top-liked .no-messages {
+  background-color: #242526;
+}
+
+/* Tab Navigation */
+.profile-tabs {
+  display: flex;
+  justify-content: space-around;
+  background-color: #fff;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: var(--header-height);
+  z-index: 10;
+  transition: all 0.3s ease;
+  margin-top: 5px; /* Add a small top margin */
+}
+
+.profile-tabs.sticky {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.profile-sticky-title {
+  display: none;
+  position: absolute;
+  left: 16px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #000;
+  line-height: 48px; /* Match height of tabs */
+  transition: opacity 0.2s ease;
+  width: 40%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-tabs.sticky .profile-sticky-title {
+  display: block;
+}
+
+.profile-tabs.sticky .profile-tab {
+  /* Adjust tab margins when sticky title is visible */
+  width: 30%;
+  margin-left: auto;
+}
+
+.profile-tabs.sticky .profile-tab:first-of-type {
+  margin-left: 40%; /* Give space for the title */
+}
+
+.dark-mode .profile-tabs {
+  background-color: var(--dark-background);
+  border-bottom-color: var(--dark-border);
+}
+
+.dark-mode .profile-tabs.sticky {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .profile-sticky-title {
+  color: var(--dark-text);
+}
+
+.profile-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #657786;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease, width 0.2s ease, margin 0.2s ease;
+  flex: 1;
+  height: 100%;
+}
+
+.dark-mode .profile-tab {
+  color: var(--dark-secondary-text);
+}
+
+.profile-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.profile-tab.active {
+  color: #1da1f2;
+}
+
+.dark-mode .profile-tab.active {
+  color: #4a90e2;
+}
+
+.profile-tab.active::after {
+  background-color: #1da1f2;
+}
+
+.dark-mode .profile-tab.active::after {
+  background-color: #4a90e2;
+}
+
+.profile-tab:hover {
+  color: #1da1f2;
+}
+
+.dark-mode .profile-tab:hover {
+  color: #4a90e2;
+}
+
+.tab-icon {
+  margin-right: 8px;
+  font-size: 1.1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: #1da1f2;
+  color: white;
+  border-radius: 9px;
+}
+
+.dark-mode .badge {
+  background-color: #4a90e2;
+}
+
+/* Ensure the tab content has proper spacing */
+.tab-content {
+  min-height: 300px;
+  transition: opacity 0.2s ease;
+  margin-top: 0;
+  padding: 5px 0; /* Add a small top and bottom padding */
+}
+
+.tab-content .user-messages-section,
+.tab-content .profile-top-liked {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* Instagram/Facebook style message layout */
+.user-messages-list.instagram-style {
+  display: flex;
+  flex-direction: column;
+  gap: 1px; /* Almost no gap between messages */
+  background-color: #f0f2f5; /* Facebook background color */
+  margin: 0 auto; /* Center the messages */
+  width: 100%; /* Use full width of container */
+}
+
+.dark-mode .user-messages-list.instagram-style {
+  background-color: #18191a; /* Facebook dark mode background */
+}
+
+.user-message-item.facebook-style {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  background-color: white;
+  border-left: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .user-message-item.facebook-style {
+  background-color: #242526; /* Facebook dark mode card color */
+  border-left: none;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px; /* Increase vertical padding slightly */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .message-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 12px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+  margin-left: 5px; /* Add margin to the left of the avatar */
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .message-avatar {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-author-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  margin-right: 8px; /* Add some right margin */
+}
+
+.message-author {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1c1e21;
+  margin-bottom: 2px; /* Add a small bottom margin */
+}
+
+.dark-mode .message-author {
+  color: #e4e6eb;
+}
+
+.message-timestamp-right {
+  margin-left: auto;
+  margin-right: 2px;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: #65676b;
+  padding-left: 8px; /* Add some left padding */
+  padding-right: 5px;
+}
+
+.dark-mode .message-timestamp-right {
+  color: #b0b3b8;
+}
+
+.message-content-square {
+  width: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: hidden;
+  display: block;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.dark-mode .message-content-square {
+  background-color: transparent;
+}
+
+.message-text-bold {
+  font-size: 14px;
+  font-weight: 400;
+  font-style: italic;
+  text-align: left;
+  line-height: 1.3;
+  color: #65676b;
+  margin: 0;
+  padding: 12px 16px;
+  word-break: break-word;
+}
+
+.dark-mode .message-text-bold {
+  color: #b0b3b8;
+}
+
+/* Styling for clickable links in profile messages */
+.message-text-bold .message-link {
+  color: #1877f2; /* Facebook blue */
+  text-decoration: none;
+  word-break: break-all; /* Break long URLs to prevent horizontal overflow */
+  transition: color 0.2s, text-decoration 0.2s;
+  font-weight: 500; /* Make links slightly bolder than regular text */
+}
+
+.message-text-bold .message-link:hover {
+  text-decoration: underline;
+  color: #166fe5; /* Slightly darker blue on hover */
+}
+
+.message-text-bold .message-link:active {
+  color: #0e5fc7; /* Even darker blue when clicked */
+}
+
+/* Dark mode styling for links */
+.dark-mode .message-text-bold .message-link {
+  color: #4a90e2; /* Lighter blue for dark mode */
+}
+
+.dark-mode .message-text-bold .message-link:hover {
+  color: #5c9ee5; /* Slightly lighter on hover in dark mode */
+}
+
+.dark-mode .message-text-bold .message-link:active {
+  color: #6aade8; /* Even lighter when clicked in dark mode */
+}
+
+/* Add styling for message images in profile cards */
+.message-image {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  border-radius: 0;
+  display: block;
+}
+
+.message-actions {
+  padding: 14px 16px; /* Match header padding */
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  justify-content: space-between; /* Change from flex-start to space-between */
+  align-items: center; /* Add to vertically center items */
+  gap: 0; /* Remove gap since we're using space-between */
+}
+
+.dark-mode .message-actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.location-button {
+  background-color: transparent;
+  border: none;
+  color: #1877f2; /* Facebook blue */
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px; /* Add some gap between icon and text */
+  margin-left: auto; /* Push to far right */
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.location-icon {
+  margin-right: 5px;
+  font-size: 1rem;
+}
+
+.location-button:hover {
+  background-color: rgba(24, 119, 242, 0.1);
+}
+
+.dark-mode .location-button {
+  color: #4a90e2;
+}
+
+.dark-mode .location-button:hover {
+  background-color: rgba(74, 144, 226, 0.1);
+}
+
+.location-placeholder {
+  width: 100px; /* Approximate width to match the location button */
+}
+
+/* Apply the same full-width style to likes tab */
+.top-liked-messages.instagram-style {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background-color: #f0f2f5;
+  margin: 0 auto; /* Center the messages instead of using negative margins */
+  width: 100%; /* Use full width of container */
+}
+
+/* Hide section headers */
+.user-messages-section h3,
+.section-title {
+  display: none;
+}
+
+/* Media query adjustments for the new layout */
+@media (max-width: 768px) {
+  .message-content-square {
+    aspect-ratio: auto;
+    height: auto;
+    min-height: 200px;
+  }
+  
+  .message-text-bold {
+    font-size: 20px;
+  }
+}
+
+/* Profile Cover Styles */
+.profile-cover {
+  width: 100vw; /* Full viewport width */
+  height: 180px;
+  margin: 0 -15px 60px -15px; /* Negative margin to extend past container padding */
+  position: relative;
+  background-color: #1da1f2; /* Default Twitter blue */
+  transition: background-color 0.3s ease;
+  border-radius: 0; /* Remove border radius */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Profile avatar container */
+.profile-card .profile-avatar-container {
+  position: absolute;
+  bottom: -60px; /* Half the height of the avatar to overlay it */
+  left: 15px;
+  transform: none;
+  z-index: 5; /* Increase z-index to ensure visibility */
+  display: block;
+  width: 120px;
+  height: 120px;
+}
+
+/* Profile avatar */
+.profile-card .profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  background-color: #fff;
+  margin-bottom: 0;
+  display: block !important; /* Force display as block */
+  opacity: 1 !important; /* Ensure it's not hidden */
+  visibility: visible !important; /* Ensure it's visible */
+}
+
+/* Ensure the avatar-placeholder class doesn't get overridden */
+.profile-card .avatar-placeholder.profile-avatar {
+  display: flex !important; /* Override block with flex for centering content */
+  align-items: center !important;
+  justify-content: center !important;
+  color: white !important;
+  text-transform: uppercase !important;
+}
+
+.dark-mode .profile-card .profile-avatar {
+  border-color: var(--dark-card-bg);
+}
+
+/* Ensure message avatars display properly too */
+.message-avatar.avatar-placeholder {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: white !important;
+  text-transform: uppercase !important;
+}
+
+/* Media query for larger screens */
+@media (min-width: 768px) {
+  .profile-cover {
+    width: calc(100% + 40px); /* Account for the 20px padding on each side */
+    margin-left: -20px;
+    margin-right: -20px;
+  }
+}
+
+/* For mobile displays, ensure full width */
+@media (max-width: 767px) {
+  .profile-container {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  
+  .profile-cover {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+/* Add styles for the profile settings section */
+.profile-settings-section {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+}
+
+.dark-mode .profile-settings-section {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.profile-settings-section h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.profile-setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.dark-mode .profile-setting-item {
+  border-bottom-color: #2d2d2d;
+}
+
+.profile-setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-label {
+  font-weight: 500;
+  margin-right: 10px;
+  color: #333;
+}
+
+.dark-mode .setting-label {
+  color: #e1e1e1;
+}
+
+/* Add a subtle hover effect */
+.toggle-label:hover {
+  opacity: 0.9;
+}
+
+/* Add focus styles for accessibility */
+.toggle-switch input:focus + .toggle-label {
+  box-shadow: 0 0 1px #1da1f2;
+}
+
+.dark-mode .toggle-switch input:focus + .toggle-label {
+  box-shadow: 0 0 1px #4a90e2;
+}
+
+/* Add disabled state styles */
+.toggle-switch input:disabled + .toggle-label {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Add a subtle scale animation when toggling */
+.toggle-label:before {
+  transform-origin: center;
+  transition: .4s transform, .4s background-color;
+}
+
+.toggle-switch input:checked + .toggle-label:before {
+  transform: translateX(26px) scale(1.1);
+}
+
+.toggle-switch input:not(:checked) + .toggle-label:before {
+  transform: translateX(0) scale(1.1);
+}
+
+/* Add a subtle background pulse when toggling */
+@keyframes togglePulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; }
+}
+
+.toggle-switch input:checked + .toggle-label {
+  animation: togglePulse 0.3s ease-in-out;
+}
+
+/* Notification badge and controls */
+.notification-badge {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.notification-badge.enabled {
+  background-color: rgba(25, 135, 84, 0.15);
+  color: #198754;
+  border: 1px solid rgba(25, 135, 84, 0.3);
+  cursor: pointer;
+}
+
+.notification-badge.disabled {
+  background-color: rgba(108, 117, 125, 0.15);
+  color: #6c757d;
+  border: 1px solid rgba(108, 117, 125, 0.3);
+  margin-bottom: 8px;
+}
+
+.dark-mode .notification-badge.enabled {
+  background-color: rgba(25, 135, 84, 0.25);
+  color: #20c997;
+  border: 1px solid rgba(25, 135, 84, 0.4);
+}
+
+.dark-mode .notification-badge.disabled {
+  background-color: rgba(173, 181, 189, 0.15);
+  color: #adb5bd;
+  border: 1px solid rgba(173, 181, 189, 0.3);
+}
+
+.badge-icon {
+  font-size: 16px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.badge-status-icon {
+  font-size: 12px;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.badge-text {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.notification-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* Ensure proper width for all content in tabs */
+.tab-content .user-messages-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Media query updates for consistent width */
+@media (min-width: 768px) {
+  .tab-content .user-messages-section {
+    width: 80%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  .tab-content .user-messages-section {
+    width: 70%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+}
+
+/* Message action buttons container */
+.message-action-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Delete Button Styles */
+.delete-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #dc3545;
+  border-radius: 4px;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.delete-button:hover {
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.delete-icon {
+  margin-right: 5px;
+  font-size: 1rem;
+}
+
+.dark-mode .delete-button {
+  color: #ff6b6b;
+}
+
+.dark-mode .delete-button:hover {
+  background-color: rgba(255, 107, 107, 0.1);
+}
+
+/* Style for the location button */
+.location-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #1da1f2;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.location-button:hover {
+  background-color: rgba(29, 161, 242, 0.1);
+}
+
+.dark-mode .location-button {
+  color: #4a90e2;
+}
+
+.dark-mode .location-button:hover {
+  background-color: rgba(74, 144, 226, 0.1);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+  margin-left: auto;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-label {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.toggle-label:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+.toggle-switch input:checked + .toggle-label {
+  background-color: #1da1f2;
+}
+
+.toggle-switch input:checked + .toggle-label:before {
+  transform: translateX(26px);
+}
+
+.dark-mode .toggle-label {
+  background-color: #4a4a4a;
+}
+
+.dark-mode .toggle-switch input:checked + .toggle-label {
+  background-color: #4a90e2;
+}
+
+.toggle-icon {
+  color: white;
+  font-size: 14px;
+  z-index: 1;
+  transition: .4s;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-text {
+  display: none;
+} 

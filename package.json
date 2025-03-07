@@ -4,10 +4,16 @@
   "description": "Real-time social networking application with Express, React, and Socket.IO",
   "main": "index.js",
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "start": "concurrently \"npm run server\" \"npm run client\" \"npm run docs\"",
     "server": "cd server && npm run dev",
-    "client": "cd client && npm run dev",
-    "install-all": "npm install && cd server && npm install && cd ../client && npm install"
+    "client": "cd clients/Web && npm run dev",
+    "docs": "cd clients/docs && npm start",
+    "install-all": "npm install && cd server && npm install && cd ../clients/Web && npm install && cd ../docs && npm install",
+    "build": "bash build.sh",
+    "prod:start": "concurrently \"cd server && npm run start\" \"cd clients/docs && serve -s build -l 3002\"",
+    "deploy:docs": "cd clients/docs && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint ."
   },
   "keywords": [
     "socket.io",
@@ -26,6 +32,7 @@
     "cloudinary": "^2.5.1",
     "cloudinary-react": "^1.8.1",
     "react-draggable": "^4.4.6",
+    "react-icons-weather": "^1.0.5",
     "react-webcam": "^7.2.0"
   }
 }

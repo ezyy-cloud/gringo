@@ -394,4 +394,91 @@ exports.resetPassword = async (req, res) => {
     console.error('Reset password error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
+};
+
+/**
+ * Check if user is an admin
+ * @route GET /api/auth/admin
+ * @access Private
+ */
+exports.checkAdmin = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Check if user is an admin
+    if (!user.isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'User is not an admin',
+        isAdmin: false
+      });
+    }
+    
+    // User is an admin
+    return res.status(200).json({
+      success: true,
+      isAdmin: true
+    });
+  } catch (error) {
+    console.error('Error checking admin status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Get user profile by username
+exports.getUserProfile = async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    const user = await User.findOne({ username }).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Create the response data with follower/following counts
+    const responseData = {
+      id: user._id,
+      username: user.username,
+      email: user.email,
+      profilePicture: user.profilePicture,
+      coverColor: user.coverColor,
+      bio: user.bio,
+      darkMode: user.darkMode,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen,
+      createdAt: user.createdAt,
+      followersCount: user.followers.length,
+      followingCount: user.following.length
+    };
+
+    // Return user data
+    return res.status(200).json({
+      success: true,
+      data: {
+        user: responseData
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
 }; 

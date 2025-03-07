@@ -49,7 +49,10 @@ const MessageSchema = new mongoose.Schema({
   }],
   likesCount: {
     type: Number,
-    default: 0
+    default: 0,
+    get: function() {
+      return this.likes ? this.likes.length : 0;
+    }
   },
   sequence: {
     type: Number,
@@ -65,13 +68,44 @@ const MessageSchema = new mongoose.Schema({
   }
 }, {
   toJSON: {
+    virtuals: true,
     transform: function(doc, ret) {
       if (ret.createdAt) {
         ret.createdAt = ret.createdAt.toISOString();
       }
+      
+      // Calculate likes count from the likes array
+      ret.likesCount = ret.likes ? ret.likes.length : 0;
+      
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: function(doc, ret) {
+      if (ret.createdAt) {
+        ret.createdAt = ret.createdAt.toISOString();
+      }
+      
+      // Calculate likes count from the likes array
+      ret.likesCount = ret.likes ? ret.likes.length : 0;
+      
       return ret;
     }
   }
+});
+
+// Virtual for likesCount
+MessageSchema.virtual('totalLikes').get(function() {
+  return this.likes ? this.likes.length : 0;
+});
+
+// Pre-save middleware to update likesCount
+MessageSchema.pre('save', function(next) {
+  if (this.isModified('likes')) {
+    this.likesCount = this.likes.length;
+  }
+  next();
 });
 
 // Create a compound index for userId and createdAt for faster timeline queries

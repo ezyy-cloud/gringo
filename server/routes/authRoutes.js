@@ -21,4 +21,7 @@ router.get('/me', protect, authController.getCurrentUser);
 // Update user profile (protected route)
 router.put('/profile', protect, authController.updateProfile);
 
+// Check if user is an admin (protected route)
+router.get('/admin', protect, authController.checkAdmin);
+
 module.exports = router; 
