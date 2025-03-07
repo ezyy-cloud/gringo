@@ -42,10 +42,10 @@ GringoClient.initialize(apiKey: "YOUR_API_KEY")
 GringoClient.shared.login(email: "user@example.com", password: "password") { result in
     switch result {
     case .success(let user):
-        print("Logged in as: \(user.username)")
+        print("Logged in as: $(user.username)")
         // Proceed to main app flow
     case .failure(let error):
-        print("Login failed: \(error.localizedDescription)")
+        print("Login failed: $(error.localizedDescription)")
         // Handle error
     }
 }
@@ -166,8 +166,8 @@ export default function NearbyMessagesScreen() {
               <Text>{item.text}</Text>
               <Text style={{ color: '#888' }}>
                 {item.distance < 1000 
-                  ? \`\${Math.round(item.distance)}m away\` 
-                  : \`\${(item.distance / 1000).toFixed(1)}km away\`}
+                  ? Math.round(item.distance) + 'm away'
+                  : (item.distance / 1000).toFixed(1) + 'km away'}
               </Text>
             </View>
           )}

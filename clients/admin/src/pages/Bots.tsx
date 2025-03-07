@@ -31,12 +31,13 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DataTable from '../components/DataTable';
-import { getBot as getMainServerBot } from '../services/api';
 import botService from '../services/botService';
 import { useAuth } from '../hooks/useAuth';
+import { SelectChangeEvent } from '@mui/material/Select';
 
 interface Bot {
   _id: string;
+  id?: string;
   name?: string;
   username: string;
   email: string;
@@ -67,6 +68,7 @@ interface Bot {
   // Keep other fields but mark as optional
   totalPosts?: number;
   totalInteractions?: number;
+  locationCount?: number;
 }
 
 interface BotStatus {
@@ -120,7 +122,8 @@ const Bots: React.FC = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
-  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
+  // Commented out unused state
+  // const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -240,17 +243,17 @@ const Bots: React.FC = () => {
         setConnectionTested(true);
         
         // Handle rate limiting error (429)
-        if (error.response && error.response.status === 429) {
+        if ((error as any).response && (error as any).response.status === 429) {
           handleRateLimitError('connection test');
           return;
         }
         
         // Provide more detailed error message
         let errorMessage = 'Failed to connect to bot microservice';
-        if (error.isBotServiceDown) {
+        if ((error as any).isBotServiceDown) {
           errorMessage = 'Bot microservice is down or unreachable. Please check if the service is running.';
-        } else if (error.response) {
-          errorMessage = `Error ${error.response.status}: ${error.response.statusText}`;
+        } else if ((error as any).response) {
+          errorMessage = `Error ${(error as any).response.status}: ${(error as any).response.statusText}`;
         }
         
         setSnackbar({
@@ -402,9 +405,18 @@ const Bots: React.FC = () => {
         console.error('Error fetching bots:', error);
         
         // Handle rate limiting error specifically
-        if (error.response && error.response.status === 429) {
-          handleRateLimitError('bot fetching');
-        } else {
+        try {
+          if ((error as any).response && (error as any).response.status === 429) {
+            handleRateLimitError('bot fetching');
+          } else {
+            setSnackbar({
+              open: true,
+              message: 'Failed to fetch bots. Please try again.',
+              severity: 'error',
+            });
+          }
+        } catch (e) {
+          console.error('Error handling rate limit:', e);
           setSnackbar({
             open: true,
             message: 'Failed to fetch bots. Please try again.',
@@ -440,14 +452,14 @@ const Bots: React.FC = () => {
       const activeBotIds = new Set<string>();
       
       if (activeBotsResponse && activeBotsResponse.success && Array.isArray(activeBotsResponse.bots)) {
-        activeBotsResponse.bots.forEach(bot => {
+        activeBotsResponse.bots.forEach((bot: any) => {
           if (bot._id || bot.id) {
             activeBotIds.add(bot._id || bot.id);
           }
         });
       }
       
-      const statuses = {};
+      const statuses: Record<string, any> = {};
       
       // Process all bots in parallel
       const statusPromises = botsList.map(async (bot) => {
@@ -466,8 +478,8 @@ const Bots: React.FC = () => {
               uptime: 0,
               memory: 0,
               cpu: 0,
-              lastMessage: '',
-              lastError: 'Bot service unavailable'
+              lastMessage: 'No data available',
+              lastError: null
             }
           };
         }
@@ -487,7 +499,7 @@ const Bots: React.FC = () => {
       console.error('Error fetching bot statuses:', error);
       
       // Create default statuses for all bots based on their DB status
-      const defaultStatuses = {};
+      const defaultStatuses: Record<string, any> = {};
       botsList.forEach(bot => {
         defaultStatuses[bot._id] = {
           id: bot._id,
@@ -495,12 +507,22 @@ const Bots: React.FC = () => {
           uptime: 0,
           memory: 0,
           cpu: 0,
-          lastMessage: '',
-          lastError: 'Bot service unavailable'
+          lastMessage: 'No data available',
+          lastError: null
         };
       });
       
+      // Use default statuses when API fails
       setBotStatuses(defaultStatuses);
+      
+      // Handle rate limiting error specifically
+      try {
+        if ((error as any).response && (error as any).response.status === 429) {
+          handleRateLimitError('bot status fetching');
+        }
+      } catch (e) {
+        console.error('Error handling rate limit:', e);
+      }
     }
   };
 
@@ -571,7 +593,7 @@ const Bots: React.FC = () => {
     }
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
@@ -588,7 +610,7 @@ const Bots: React.FC = () => {
         status: bot.status || 'active',
         capabilities: bot.capabilities || ['messaging'],
         webhookUrl: bot.webhookUrl || '',
-        creator: bot.creator?._id || user?._id || '',
+        creator: bot.creator?._id || user?.id || '',
         type: bot.type || '',
       });
     } else {
@@ -601,7 +623,7 @@ const Bots: React.FC = () => {
         status: 'active',
         capabilities: ['messaging'],
         webhookUrl: '',
-        creator: user?._id || '',
+        creator: user?.id || '',
         type: '',
       });
     }
@@ -613,7 +635,9 @@ const Bots: React.FC = () => {
     setOpenDialog(false);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }> | SelectChangeEvent<string>
+  ) => {
     const { name, value } = e.target;
     
     if (!name) return;
@@ -766,33 +790,35 @@ const Bots: React.FC = () => {
             const newBot = response.data;
             
             // Ensure we have all required fields for the Bot interface
-            const completeBot: Bot = {
-              _id: newBot._id || newBot.id || `temp-${Date.now()}`,
-              username: newBot.username || botData.username,
-              email: newBot.email || botData.email,
-              type: newBot.type || botData.type,
-              purpose: newBot.purpose || botData.purpose,
+            const newBotWithDefaults: Bot = {
+              _id: newBot._id,
+              id: newBot.id,
+              username: newBot.username,
+              email: newBot.email,
+              type: newBot.type,
+              purpose: newBot.purpose,
               status: (newBot.status || 'active') as 'active' | 'inactive' | 'suspended' | 'pending',
-              creator: newBot.creator || {
-                _id: user?._id || 'unknown',
+              isBot: true,
+              isAdmin: false,
+              // Add default values for missing properties
+              creator: {
+                _id: user?.id || 'unknown',
                 username: user?.username || 'Unknown User',
                 email: user?.email || '',
               },
-              createdAt: newBot.createdAt || new Date().toISOString(),
-              lastActive: newBot.lastActive || new Date().toISOString(),
-              lastSeen: newBot.lastSeen || new Date().toISOString(),
-              isBot: true,
-              isAdmin: false,
-              profilePicture: newBot.profilePicture || '',
-              coverColor: newBot.coverColor || '#' + Math.floor(Math.random()*16777215).toString(16),
-              bio: newBot.bio || botData.purpose,
+              createdAt: new Date().toISOString(),
+              lastActive: new Date().toISOString(),
+              lastSeen: new Date().toISOString(),
+              profilePicture: '',
+              coverColor: '#' + Math.floor(Math.random()*16777215).toString(16),
+              bio: botData.purpose,
               isOnline: false,
               darkMode: false,
-              webhookUrl: newBot.webhookUrl || null,
+              webhookUrl: null,
             };
             
             // Add new bot to state
-            setBots(prevBots => [...prevBots, completeBot]);
+            setBots(prevBots => [...prevBots, newBotWithDefaults]);
             
             setSnackbar({
               open: true,
@@ -805,7 +831,7 @@ const Bots: React.FC = () => {
             
             // Refresh statuses if service is connected
             if (serviceConnected) {
-              fetchBotStatuses([completeBot]);
+              fetchBotStatuses([newBotWithDefaults]);
             }
           } else {
             throw new Error(response.message || 'Failed to create bot');
@@ -877,7 +903,7 @@ const Bots: React.FC = () => {
       console.error('Error deleting bot:', error);
       setSnackbar({
         open: true,
-        message: `Failed to delete bot: ${error.message}`,
+        message: `Failed to delete bot: ${(error as any).message}`,
         severity: 'error',
       });
       
@@ -922,7 +948,7 @@ const Bots: React.FC = () => {
       console.error('Error starting bot:', error);
       setSnackbar({
         open: true,
-        message: `Failed to start bot: ${error.message}`,
+        message: `Failed to start bot: ${(error as any).message}`,
         severity: 'error',
       });
     }
@@ -954,7 +980,7 @@ const Bots: React.FC = () => {
       console.error('Error stopping bot:', error);
       setSnackbar({
         open: true,
-        message: `Failed to stop bot: ${error.message}`,
+        message: `Failed to stop bot: ${(error as any).message}`,
         severity: 'error',
       });
     }
@@ -986,7 +1012,7 @@ const Bots: React.FC = () => {
       console.error('Error restarting bot:', error);
       setSnackbar({
         open: true,
-        message: `Failed to restart bot: ${error.message}`,
+        message: `Failed to restart bot: ${(error as any).message}`,
         severity: 'error',
       });
     }
@@ -1188,7 +1214,8 @@ const Bots: React.FC = () => {
             { value: "weather", label: "Weather Bot" }
           ];
           
-          setBotTypes(fallbackBotTypes);
+          console.warn('Using fallback bot types due to API error');
+          setBotTypes(fallbackBotTypes as any);
           
           // Use fallback bot type for new forms
           if (!editingBot) {
@@ -1202,7 +1229,7 @@ const Bots: React.FC = () => {
         console.error('Error fetching bot types:', error);
         
         // Handle rate limiting error specifically
-        if (error.response && error.response.status === 429) {
+        if ((error as any).response && (error as any).response.status === 429) {
           handleRateLimitError('bot types fetching');
         } else {
           // Use hardcoded fallback types when API fails - using exactly what the microservice supports
@@ -1213,7 +1240,7 @@ const Bots: React.FC = () => {
           ];
           
           console.warn('Using fallback bot types due to API error');
-          setBotTypes(fallbackBotTypes);
+          setBotTypes(fallbackBotTypes as any);
           
           // Use fallback bot type for new forms
           if (!editingBot) {

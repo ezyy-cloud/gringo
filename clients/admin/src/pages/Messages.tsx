@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
 import DataTable from '../components/DataTable';
-import { getMessages, getMessage, deleteMessage } from '../services/api';
+import { getMessages, deleteMessage } from '../services/api';
 
 interface Message {
   id: string;
@@ -115,7 +115,7 @@ const Messages: React.FC = () => {
       id: 'content',
       label: 'Content',
       minWidth: 300,
-      format: (value: string) => (
+      renderCell: (props: { row: any; value: any }) => (
         <Typography
           variant="body2"
           sx={{
@@ -126,7 +126,7 @@ const Messages: React.FC = () => {
             WebkitBoxOrient: 'vertical',
           }}
         >
-          {value}
+          {props.value}
         </Typography>
       ),
     },
@@ -134,10 +134,10 @@ const Messages: React.FC = () => {
       id: 'isApiMessage',
       label: 'Type',
       minWidth: 100,
-      format: (value: boolean) => (
+      renderCell: (props: { row: any; value: any }) => (
         <Chip
-          label={value ? 'Bot' : 'User'}
-          color={value ? 'secondary' : 'primary'}
+          label={props.value ? 'Bot' : 'User'}
+          color={props.value ? 'secondary' : 'primary'}
           size="small"
         />
       ),
@@ -148,7 +148,7 @@ const Messages: React.FC = () => {
       id: 'createdAt',
       label: 'Created At',
       minWidth: 160,
-      format: (value: string) => formatDateTime(value),
+      format: (value: any) => formatDateTime(value),
     },
   ];
 

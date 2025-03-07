@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Grid, Paper, Typography, Box, CircularProgress, Button, IconButton } from '@mui/material';
 import {
   People as PeopleIcon,
@@ -56,14 +56,6 @@ interface DashboardStats {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-interface LocationData {
-  name: string;
-  count: number;
-  coordinates?: [number, number];
-  text?: string;
-  messageId?: string;
-}
-
 interface GeoJSONFeature {
   type: 'Feature';
   properties: {
@@ -71,6 +63,7 @@ interface GeoJSONFeature {
     count: number;
     description: string;
     text?: string;
+    messageId?: string;
     hasDirectCoordinates: boolean;
   };
   geometry: {
@@ -83,38 +76,6 @@ interface GeoJSONData {
   type: 'FeatureCollection';
   features: GeoJSONFeature[];
 }
-
-// Function to transform location data to GeoJSON format
-const transformToGeoJSON = (locations: LocationData[]): GeoJSONData => {
-  const features: GeoJSONFeature[] = locations.map(location => {
-    // Default coordinates if none provided
-    const coordinates: [number, number] = location.coordinates || [0, 0];
-    
-    return {
-      type: 'Feature',
-      properties: {
-        name: location.name,
-        count: location.count,
-        description: `${location.count} messages`,
-        text: location.text,
-        messageId: location.messageId,
-        hasDirectCoordinates: !!location.coordinates
-      },
-      geometry: {
-        type: 'Point',
-        coordinates
-      }
-    };
-  });
-
-  const result: GeoJSONData = {
-    type: 'FeatureCollection',
-    features
-  };
-  
-  console.log('🗺️ FINAL GEOJSON FOR MAP:', result);
-  return result;
-};
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -176,6 +137,7 @@ const Dashboard: React.FC = () => {
                 count: location.count,
                 description: location.text || 'No message text',
                 text: location.text,
+                messageId: location.messageId,
                 hasDirectCoordinates: true
               },
               geometry: {
@@ -324,8 +286,8 @@ const Dashboard: React.FC = () => {
                     dataKey="value"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
-                    {stats.botTypeDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {stats.botTypeDistribution.map((_entry, index) => (
+                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Legend />

@@ -32,11 +32,8 @@ import {
   ExpandMore,
   SupportAgent as SupportIcon,
   Architecture as ArchitectureIcon,
-  Business as BusinessIcon,
   Star as StarIcon,
   Storage as StorageIcon,
-  Layers as LayersIcon,
-  Settings as SettingsIcon,
   PhoneAndroid as MobileIcon,
   LocationOn as LocationIcon,
 } from '@mui/icons-material';

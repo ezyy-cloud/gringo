@@ -7,7 +7,6 @@ import {
   AttachMoney as MoneyIcon,
   ThumbUp as EngagementIcon,
   BubbleChart as DemographicsIcon,
-  Assignment as CaseStudyIcon,
   Business as BusinessIcon,
   Store as StoreIcon,
   Restaurant as RestaurantIcon,

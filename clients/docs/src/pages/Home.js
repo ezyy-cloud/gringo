@@ -5,7 +5,6 @@ import {
   Code as CodeIcon,
   Security as SecurityIcon,
   Speed as SpeedIcon,
-  Build as BuildIcon,
   Person as UserIcon,
   Campaign as AdvertisingIcon,
   Star as CreatorIcon,

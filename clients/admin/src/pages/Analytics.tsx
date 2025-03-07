@@ -433,7 +433,7 @@ const aggregateSimilarLocations = (
   });
   
   // Convert groups to aggregated location objects
-  const aggregatedLocations = Object.entries(locationGroups).map(([key, group]) => {
+  const aggregatedLocations = Object.entries(locationGroups).map(([_key, group]) => {
     // Choose a representative name for the group
     let displayName: string;
     
@@ -618,58 +618,6 @@ const Analytics: React.FC = () => {
     }
   };
 
-  const generateTimeSeriesData = (period: Period, min: number, max: number) => {
-    const data = [];
-    const now = new Date();
-    let numPoints = 0;
-    let format = '';
-    
-    switch (period) {
-      case 'day':
-        numPoints = 24;
-        format = 'HH:00';
-        break;
-      case 'week':
-        numPoints = 7;
-        format = 'ddd';
-        break;
-      case 'month':
-        numPoints = 30;
-        format = 'MMM D';
-        break;
-      case 'year':
-        numPoints = 12;
-        format = 'MMM';
-        break;
-    }
-    
-    for (let i = 0; i < numPoints; i++) {
-      let date = '';
-      
-      switch (period) {
-        case 'day':
-          date = `${i}:00`;
-          break;
-        case 'week':
-          date = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i];
-          break;
-        case 'month':
-          date = `Day ${i + 1}`;
-          break;
-        case 'year':
-          date = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i];
-          break;
-      }
-      
-      data.push({
-        date,
-        count: Math.floor(Math.random() * (max - min + 1)) + min,
-      });
-    }
-    
-    return data;
-  };
-
   const handlePeriodChange = (event: SelectChangeEvent) => {
     setPeriod(event.target.value as Period);
   };
@@ -680,7 +628,7 @@ const Analytics: React.FC = () => {
   };
 
   const handleChartTypeChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newChartType: 'line' | 'bar' | null
   ) => {
     if (newChartType !== null) {
@@ -897,7 +845,7 @@ const Analytics: React.FC = () => {
                 aggregationPrecision === 2 ? 'Neighborhood Level' :
                 'Street Level'
               }</div>
-              <div>Groups: {data.locations.data.filter(loc => loc.locationCount > 1).length}</div>
+              <div>Groups: {data.locations.data.filter(loc => (loc.count > 1)).length}</div>
             </Box>
             
             <ResponsiveContainer width="100%" height={300}>
@@ -921,8 +869,8 @@ const Analytics: React.FC = () => {
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip 
-                  formatter={(value, name, props) => [value, 'Messages']}
-                  labelFormatter={(name, entry) => {
+                  formatter={(value: any) => [value, 'Messages']}
+                  labelFormatter={(name: any, entry: any) => {
                     // Get the coordinates and additional info from the data entry
                     const dataEntry = entry[0]?.payload;
                     if (dataEntry) {

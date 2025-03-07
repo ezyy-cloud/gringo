@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, Paper, Divider, Grid, Tabs, Tab, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Typography, Paper, Grid, Tabs, Tab, List, ListItem, ListItemText } from '@mui/material';
 import CodeBlock from '../components/CodeBlock';
 
 function TabPanel({ children, value, index }) {
