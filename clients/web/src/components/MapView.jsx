@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import ReactMapGL, { Marker, Popup } from 'react-map-gl';
+import ReactMapGL, { Marker, Popup, Source, Layer } from 'react-map-gl';
 import { useNavigate } from 'react-router-dom';
-import { GoHeart, GoHeartFill, GoLocation, GoHome } from "react-icons/go";
+import { GoHeart, GoHeartFill, GoLocation, GoHome, GoStack } from "react-icons/go";
 import AvatarPlaceholder from './AvatarPlaceholder';
 import WeatherWidget from './WeatherWidget';
 import { timeAgo } from '../utils/dateUtils';
@@ -10,17 +10,23 @@ import { renderTextWithLinks } from '../utils/textUtils.jsx';
 import apiService from '../services/apiService';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './MapView.css';
+import './MapView3D.css';
 
 const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkMode, isLoading }) => {
   const [viewState, setViewState] = useState({
     longitude: -73.935242,  // Default to NYC coordinates
     latitude: 40.730610,
-    zoom: 12
+    zoom: 12,
+    pitch: 0,
+    bearing: 0
   });
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likedMessagesCache, setLikedMessagesCache] = useState(null);
+  const [is3DMode, setIs3DMode] = useState(false);
+  const [is3DLoaded, setIs3DLoaded] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const mapRef = useRef();
   const navigate = useNavigate();
   const likeButtonRef = useRef(null);
@@ -35,6 +41,46 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     navigate(`/profile/${username}`);
     setSelectedMessage(null); // Close popup after navigation
   };
+
+  // Toggle 3D mode with loading state
+  const toggle3DMode = useCallback(() => {
+    if (!is3DMode) {
+      // When turning on 3D mode, set loading state first
+      setIs3DLoaded(false);
+      
+      // Then enable 3D mode
+      setIs3DMode(true);
+      
+      // Set appropriate pitch for 3D view - this tilts the map to show buildings better
+      setViewState(prev => ({
+        ...prev,
+        pitch: 45, // Tilt the map for 3D view
+        zoom: Math.max(prev.zoom, 15) // Ensure we're zoomed in enough to see buildings
+      }));
+      
+      // Show hint message after 3D mode is loaded
+      setTimeout(() => {
+        setIs3DLoaded(true);
+        // Show hint message briefly
+        setShowHint(true);
+        // Hide it after 5 seconds
+        setTimeout(() => {
+          setShowHint(false);
+        }, 5000);
+      }, 1000);
+    } else {
+      // When turning off, reset the pitch and disable 3D
+      setViewState(prev => ({
+        ...prev,
+        pitch: 0, // Reset tilt
+      }));
+      
+      // Disable 3D mode
+      setIs3DMode(false);
+      setIs3DLoaded(false);
+      setShowHint(false);
+    }
+  }, [is3DMode]);
 
   // Cache user's liked messages
   useEffect(() => {
@@ -327,8 +373,62 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     }
   }, [selectedMessage]);
 
-  // Fly to user location when available and button clicked
-  // ... existing code ...
+  // Add this new effect to ensure 3D buildings layer is added when needed
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    const map = mapRef.current.getMap();
+    
+    // Wait for map to be loaded
+    if (!map.isStyleLoaded()) {
+      map.once('style.load', () => {
+        addBuildingLayer(map);
+      });
+    } else {
+      addBuildingLayer(map);
+    }
+    
+    return () => {
+      // Cleanup if needed
+      if (map.getLayer('3d-buildings')) {
+        map.removeLayer('3d-buildings');
+      }
+    };
+  }, [is3DMode, isDarkMode]);
+  
+  // Function to add 3D building layer
+  const addBuildingLayer = (map) => {
+    // Remove existing layer if it exists
+    if (map.getLayer('3d-buildings')) {
+      map.removeLayer('3d-buildings');
+    }
+    
+    // Only add the layer if in 3D mode
+    if (is3DMode) {
+      map.addLayer({
+        'id': '3d-buildings',
+        'source': 'composite',
+        'source-layer': 'building',
+        'filter': ['==', 'extrude', 'true'],
+        'type': 'fill-extrusion',
+        'minzoom': 14,
+        'paint': {
+          'fill-extrusion-color': isDarkMode ? '#242526' : '#aaa',
+          'fill-extrusion-height': [
+            'interpolate', ['linear'], ['zoom'],
+            15, 0,
+            15.05, ['get', 'height']
+          ],
+          'fill-extrusion-base': [
+            'interpolate', ['linear'], ['zoom'],
+            15, 0,
+            15.05, ['get', 'min_height']
+          ],
+          'fill-extrusion-opacity': isDarkMode ? 0.8 : 0.6
+        }
+      }, 'waterway-label');
+    }
+  };
 
   return (
     <div className="map-container">
@@ -338,6 +438,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         onMove={evt => setViewState(evt.viewState)}
         mapStyle={isDarkMode ? "mapbox://styles/mapbox/dark-v11" : "mapbox://styles/mapbox/light-v11"}
         mapboxAccessToken="pk.eyJ1IjoiZGFya25pZ2h0MDA3IiwiYSI6ImNqOXpiMWF3MjhuajEyeHFzcjhzdDVzN20ifQ.DlcipLyUIsK1pVHRtPK9Mw"
+        terrain={is3DMode ? { source: 'mapbox-dem', exaggeration: 1.5 } : undefined}
       >
         {/* Loading indicator */}
         {isLoading && (
@@ -459,7 +560,9 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             setViewState({
               longitude: userLocation.longitude,
               latitude: userLocation.latitude,
-              zoom: 14 // Closer zoom for user's location
+              zoom: 14, // Closer zoom for user's location
+              pitch: is3DMode ? 45 : 0, // Maintain pitch if in 3D mode
+              bearing: viewState.bearing
             });
           }}
           title="Center map on my location"
@@ -468,6 +571,29 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         </button>
       )}
 
+      {/* Toggle 3D Mode Button */}
+      <button 
+        className={`toggle-3d-btn ${is3DMode ? 'active' : ''}`}
+        onClick={toggle3DMode}
+        title={is3DMode ? "Switch to 2D mode" : "Switch to 3D mode"}
+      >
+        <GoStack />
+      </button>
+      
+      {/* 3D loading indicator */}
+      {is3DMode && !is3DLoaded && (
+        <div className={`three-loading ${isDarkMode ? 'dark-mode' : ''}`}>
+          <div className="three-loading-spinner"></div>
+          <p>Loading 3D view...</p>
+        </div>
+      )}
+      
+      {/* 3D view hint */}
+      <div className={`three-view-hint ${showHint ? 'visible' : ''}`}>
+        Drag to pan • Scroll to zoom • Right-click + drag to rotate
+      </div>
+
+      {/* Empty state message */}
       {messagesWithLocation.length === 0 && (
         <div className={`no-location-messages ${isDarkMode ? 'dark-mode' : ''}`}>
           <GoLocation size={32} className="empty-state-icon" />

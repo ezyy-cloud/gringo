@@ -27,12 +27,74 @@ const MessageModal = ({ isOpen, onClose, onShareUpdate, placeholder, disabled, i
         
         // Convert base64 to blob if the image is a base64 string (from camera)
         if (typeof image === 'string' && image.startsWith('data:image')) {
-          const response = await fetch(image);
-          const blob = await response.blob();
-          formData.append('image', blob, 'camera-image.jpg');
+          try {
+            // Extract content type and base64 data using regex
+            const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            
+            if (matches && matches.length === 3) {
+              const contentType = matches[1];
+              const base64Data = matches[2];
+              
+              // Convert base64 to binary
+              const byteCharacters = atob(base64Data);
+              const byteArrays = [];
+              
+              // Process in chunks to avoid memory issues with large images
+              for (let i = 0; i < byteCharacters.length; i += 1024) {
+                const slice = byteCharacters.slice(i, i + 1024);
+                const byteNumbers = new Array(slice.length);
+                
+                for (let j = 0; j < slice.length; j++) {
+                  byteNumbers[j] = slice.charCodeAt(j);
+                }
+                
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+              }
+              
+              // Create blob with proper content type
+              const blob = new Blob(byteArrays, { type: contentType });
+              formData.append('image', blob, `image.${contentType.split('/')[1] || 'jpg'}`);
+              console.log(`Created blob from base64 image with content type: ${contentType}`);
+            } else {
+              // Fallback to simpler method if regex doesn't match
+              console.log('Regex matching failed, using fetch API for blob conversion');
+              const response = await fetch(image);
+              const blob = await response.blob();
+              formData.append('image', blob, 'camera-image.jpg');
+            }
+          } catch (conversionError) {
+            console.error('Error converting base64 to blob:', conversionError);
+            alert('There was a problem processing the image. Please try again or use a different image.');
+            setIsUploading(false);
+            return;
+          }
         } else {
           // If it's a File object
-          formData.append('image', image);
+          if (image instanceof File) {
+            // Validate image file type
+            if (!image.type.startsWith('image/')) {
+              alert('The selected file is not a valid image.');
+              setIsUploading(false);
+              return;
+            }
+            
+            // Check file size (max 5MB)
+            if (image.size > 5 * 1024 * 1024) {
+              alert('Image size must be less than 5MB.');
+              setIsUploading(false);
+              return;
+            }
+            
+            formData.append('image', image);
+            console.log(`Added file image with type: ${image.type}`);
+          } else {
+            // Unknown image format
+            console.error('Unknown image format:', typeof image);
+            alert('Unsupported image format. Please try again with a different image.');
+            setIsUploading(false);
+            return;
+          }
         }
         
         formData.append('message', trimmedMessage);
@@ -47,6 +109,7 @@ const MessageModal = ({ isOpen, onClose, onShareUpdate, placeholder, disabled, i
         onClose(); // Close the modal after sending
       } catch (error) {
         console.error('Error uploading image:', error);
+        alert('Failed to upload the image. Please try again.');
       } finally {
         setIsUploading(false);
       }

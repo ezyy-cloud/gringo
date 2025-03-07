@@ -183,6 +183,15 @@ const createMessageWithImage = async (req, res, io, broadcastMessage, notifyFoll
       return res.status(400).json({ error: 'Image file is required' });
     }
     
+    // Add detailed logging of image properties before uploading
+    console.log('Image upload details:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      bufferLength: req.file.buffer.length,
+      bufferStart: req.file.buffer.length > 20 ? req.file.buffer.toString('hex', 0, 20) + '...' : req.file.buffer.toString('hex')
+    });
+    
     console.log('Image upload received:', req.file.originalname, 'from socket ID:', socketId, 'User:', username || 'Unknown');
     
     // Upload the image to Cloudinary
@@ -201,7 +210,8 @@ const createMessageWithImage = async (req, res, io, broadcastMessage, notifyFoll
         async (error, uploadResult) => {
           if (error) {
             console.error('Cloudinary upload error:', error);
-            return res.status(500).json({ error: 'Image upload failed' });
+            console.error('Cloudinary detailed error info:', JSON.stringify(error, null, 2));
+            return res.status(500).json({ error: 'Image upload failed', details: error });
           }
           
           // Use provided messageId or create a unique ID for this message
@@ -287,11 +297,17 @@ const createMessageWithImage = async (req, res, io, broadcastMessage, notifyFoll
         }
       );
       
-      // Convert buffer to readable stream and pipe to cloudinary
-      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+      // Try adding a try/catch block around the stream creation
+      try {
+        // Convert buffer to readable stream and pipe to cloudinary
+        streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+      } catch (streamError) {
+        console.error('Error creating stream for Cloudinary upload:', streamError);
+        return res.status(500).json({ error: 'Failed to process image stream', details: streamError.message });
+      }
     } catch (uploadError) {
       console.error('Error uploading to Cloudinary:', uploadError);
-      return res.status(500).json({ error: 'Image upload failed' });
+      return res.status(500).json({ error: 'Image upload failed', details: uploadError.message });
     }
   } catch (error) {
     console.error('Error processing message with image:', error);

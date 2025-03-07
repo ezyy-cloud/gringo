@@ -84,12 +84,32 @@ const CameraCapture = ({ onCapture, onClose }) => {
 
   const capture = useCallback(() => {
     if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot({
-        width: videoConstraints.width.ideal,
-        height: videoConstraints.height.ideal
-      });
-      setImgSrc(imageSrc);
-      setIsCapturing(false);
+      try {
+        // Use a high quality JPEG format when taking the screenshot
+        const imageSrc = webcamRef.current.getScreenshot({
+          width: videoConstraints.width.ideal,
+          height: videoConstraints.height.ideal,
+          quality: 0.92 // Use high quality to avoid compression artifacts
+        });
+        
+        if (!imageSrc) {
+          console.error('Failed to capture image - no image data returned');
+          return;
+        }
+        
+        // Validate the image format
+        if (!imageSrc.startsWith('data:image/')) {
+          console.error('Invalid image format captured');
+          return;
+        }
+        
+        setImgSrc(imageSrc);
+        setIsCapturing(false);
+        console.log('Image captured successfully with dimensions:', 
+          videoConstraints.width.ideal, 'x', videoConstraints.height.ideal);
+      } catch (err) {
+        console.error('Error capturing image:', err);
+      }
     }
   }, [webcamRef, videoConstraints]);
 
@@ -172,10 +192,37 @@ const CameraCapture = ({ onCapture, onClose }) => {
     });
   };
 
-  const confirmImage = async () => {
-    const finalImage = await mergeImageWithStickers();
-    onCapture(finalImage);
-    onClose();
+  const confirmImage = () => {
+    if (!imgSrc) {
+      console.error('No image to confirm');
+      return;
+    }
+    
+    try {
+      // Merge stickers with the image if there are any
+      if (activeStickers.length > 0) {
+        mergeImageWithStickers().then(finalImage => {
+          // Validate the merged image before passing it back
+          if (!finalImage || !finalImage.startsWith('data:image/')) {
+            console.error('Invalid merged image format');
+            onCapture(imgSrc); // Fall back to the original image if merging failed
+          } else {
+            console.log('Image with stickers generated successfully');
+            onCapture(finalImage);
+          }
+        }).catch(err => {
+          console.error('Error merging stickers:', err);
+          onCapture(imgSrc); // Fall back to the original image if merging failed
+        });
+      } else {
+        // No stickers, just use the captured image
+        console.log('Using original captured image (no stickers)');
+        onCapture(imgSrc);
+      }
+    } catch (error) {
+      console.error('Error confirming image:', error);
+      onCapture(imgSrc); // Fall back to the original image if an error occurs
+    }
   };
 
   const handleCameraError = (error) => {
@@ -437,10 +484,12 @@ const CameraCapture = ({ onCapture, onClose }) => {
                 audio={false}
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
+                screenshotQuality={0.92}
                 videoConstraints={videoConstraints}
                 className="webcam"
                 style={{ filter: activeFilter.filter }}
                 onUserMediaError={handleCameraError}
+                imageSmoothing={true}
               />
             </div>
             <div className="filters-roll">

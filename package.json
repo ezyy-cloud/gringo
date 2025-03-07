@@ -4,14 +4,12 @@
   "description": "Real-time social networking application with Express, React, and Socket.IO",
   "main": "index.js",
   "scripts": {
-    "start": "concurrently \"npm run server\" \"npm run client\" \"npm run docs\"",
+    "start": "concurrently \"npm run server\" \"npm run client\"",
     "server": "cd server && npm run dev",
     "client": "cd clients/Web && npm run dev",
-    "docs": "cd clients/docs && npm start",
-    "install-all": "npm install && cd server && npm install && cd ../clients/Web && npm install && cd ../docs && npm install",
+    "install-all": "npm install && cd server && npm install && cd ../clients/Web && npm install",
     "build": "bash build.sh",
-    "prod:start": "concurrently \"cd server && npm run start\" \"cd clients/docs && serve -s build -l 3002\"",
-    "deploy:docs": "cd clients/docs && npm run build",
+    "prod:start": "concurrently \"cd server && npm run start\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint ."
   },

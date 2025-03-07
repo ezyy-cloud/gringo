@@ -362,44 +362,87 @@ module.exports = {
         const FormData = require('form-data');
         const formData = new FormData();
         
-        // Add the image data to the form
-        formData.append('image', Buffer.from(imageData), {
-          filename: `news_image_${Date.now()}.jpg`,
-          contentType: contentType || 'image/jpeg'
-        });
-        
-        // Add message content and metadata
-        formData.append('message', content);
-        formData.append('username', bot.username);
-        formData.append('senderUsername', bot.username);
-        formData.append('messageId', messageId);
-        formData.append('isApiMessage', 'true');
-        formData.append('sequence', '0');
-        formData.append('isResend', 'false');
-        
-        // Add location data to form data if available
-        if (location) {
-          // Ensure the location object has the proper structure before sending
-          const locationData = {};
-          
-          // Only include latitude and longitude if both are present
-          if (location.latitude && location.longitude) {
-            locationData.latitude = location.latitude;
-            locationData.longitude = location.longitude;
+        try {
+          // Validate image data
+          if (!imageData || !Buffer.isBuffer(imageData) || imageData.length === 0) {
+            throw new Error('Invalid image data: empty or not a buffer');
           }
           
-          // Always include fuzzyLocation flag
-          locationData.fuzzyLocation = location.fuzzyLocation !== undefined ? 
-            location.fuzzyLocation : true;
+          // CRITICAL CHECK #2: Double-check that we're not trying to upload HTML as an image
+          // This is a safeguard in case the downloadImage check missed it
+          const firstBytesStr = imageData.slice(0, 50).toString('utf8').toLowerCase();
+          if (firstBytesStr.includes('<!doctype html') || 
+              firstBytesStr.includes('<html') || 
+              firstBytesStr.includes('<?xml') ||
+              firstBytesStr.includes('<head') || 
+              firstBytesStr.includes('<body')) {
+            console.error('[NEWS BOT] Caught HTML content in prepareImageFormData that was missed earlier');
+            console.error(`[NEWS BOT] Content starts with: ${firstBytesStr.substring(0, 30)}...`);
+            throw new Error('Detected HTML content instead of an image');
+          }
           
-          // Log what's being sent
-          console.log(`[NEWS BOT] Adding location data to form:`, locationData);
+          // Ensure content type is valid for images
+          let finalContentType = contentType || 'image/jpeg';
+          if (!finalContentType.startsWith('image/')) {
+            console.warn(`[NEWS BOT] Invalid content type: ${finalContentType}, using image/jpeg instead`);
+            finalContentType = 'image/jpeg';
+          }
           
-          // Stringify the object and add to form data
-          formData.append('location', JSON.stringify(locationData));
+          // Determine file extension from content type
+          let extension = 'jpg';
+          if (finalContentType.includes('png')) extension = 'png';
+          if (finalContentType.includes('gif')) extension = 'gif';
+          if (finalContentType.includes('webp')) extension = 'webp';
+          
+          // Generate unique filename with timestamp for better tracking
+          const timestamp = Date.now();
+          const filename = `news_image_${timestamp}_${Math.random().toString(36).substring(2, 10)}.${extension}`;
+          
+          console.log(`[NEWS BOT] Preparing image upload with content type: ${finalContentType}, size: ${imageData.length} bytes`);
+          
+          // Add the image data to the form
+          formData.append('image', Buffer.from(imageData), {
+            filename,
+            contentType: finalContentType,
+            knownLength: imageData.length
+          });
+          
+          // Add message content and metadata
+          formData.append('message', content || '');
+          formData.append('username', bot.username);
+          formData.append('senderUsername', bot.username);
+          formData.append('messageId', messageId);
+          formData.append('isApiMessage', 'true');
+          formData.append('sequence', '0');
+          formData.append('isResend', 'false');
+          
+          // Add location data to form data if available
+          if (location) {
+            // Ensure the location object has the proper structure before sending
+            const locationData = {};
+            
+            // Only include latitude and longitude if both are present
+            if (location.latitude && location.longitude) {
+              locationData.latitude = location.latitude;
+              locationData.longitude = location.longitude;
+            }
+            
+            // Always include fuzzyLocation flag
+            locationData.fuzzyLocation = location.fuzzyLocation !== undefined ? 
+              location.fuzzyLocation : true;
+            
+            // Log what's being sent
+            console.log(`[NEWS BOT] Adding location data to form:`, locationData);
+            
+            // Stringify the object and add to form data
+            formData.append('location', JSON.stringify(locationData));
+          }
+          
+          return formData;
+        } catch (error) {
+          console.error(`[NEWS BOT] Error preparing form data: ${error.message}`);
+          throw error;
         }
-        
-        return formData;
       },
       
       /**
@@ -411,18 +454,99 @@ module.exports = {
       downloadImage: async (imageUrl) => {
         console.log(`[NEWS BOT] Downloading image from URL: ${imageUrl}`);
         
-        const imageResponse = await axios({
-          method: 'get',
-          url: imageUrl,
-          responseType: 'arraybuffer'
-        });
-        
-        console.log(`[NEWS BOT] Image downloaded successfully, size: ${imageResponse.data.length} bytes`);
-        
-        return {
-          data: imageResponse.data,
-          contentType: imageResponse.headers['content-type'] || 'image/jpeg'
-        };
+        try {
+          // Check if URL is valid before proceeding
+          if (!imageUrl || !imageUrl.match(/^https?:\/\/.+/i)) {
+            throw new Error('Invalid image URL format');
+          }
+          
+          // Add a timeout to prevent hanging on slow responses
+          const imageResponse = await axios({
+            method: 'get',
+            url: imageUrl,
+            responseType: 'arraybuffer',
+            timeout: 15000, // 15 second timeout
+            headers: {
+              // Add user-agent to avoid being blocked
+              'User-Agent': 'Mozilla/5.0 (compatible; GringoBot/1.0; +https://gringo.app)'
+            },
+            validateStatus: (status) => status >= 200 && status < 300 // Only consider 2xx responses as valid
+          });
+          
+          // Get content type from headers
+          const contentType = imageResponse.headers['content-type'] || 'image/jpeg';
+          console.log(`[NEWS BOT] Image downloaded successfully, size: ${imageResponse.data.length} bytes, type: ${contentType}`);
+          
+          // Check if we have valid image data
+          if (!imageResponse.data || imageResponse.data.length === 0) {
+            throw new Error('Downloaded image is empty');
+          }
+          
+          // CRITICAL CHECK: Detect HTML content regardless of content-type 
+          // Convert first bytes to a string to check for HTML markers
+          const firstBytes = imageResponse.data.slice(0, 50).toString('utf8').toLowerCase();
+          if (firstBytes.includes('<!doctype html') || 
+              firstBytes.includes('<html') || 
+              firstBytes.includes('<?xml') ||
+              firstBytes.includes('<head') || 
+              firstBytes.includes('<body')) {
+            console.error(`[NEWS BOT] URL returned HTML content instead of an image: ${imageUrl}`);
+            console.error(`[NEWS BOT] Content starts with: ${firstBytes.substring(0, 30)}...`);
+            throw new Error('URL returned HTML content instead of an image');
+          }
+          
+          // If it's an SVG, don't try to use it as JPEG as Cloudinary will reject it
+          if (contentType.includes('svg') || 
+              (imageResponse.data.length > 10 && 
+               imageResponse.data.toString().substring(0, 200).includes('<svg'))) {
+            throw new Error('SVG files are not supported for auto-posting');
+          }
+          
+          // Check if the data is too small to be a valid image (likely an error page)
+          if (imageResponse.data.length < 1024) { // Less than 1KB
+            const hexBytes = imageResponse.data.toString('hex', 0, 16);
+            // Check for common image format headers (JPEG, PNG, GIF, etc.)
+            if (!hexBytes.startsWith('ffd8') && // JPEG
+                !hexBytes.startsWith('89504e47') && // PNG
+                !hexBytes.startsWith('47494638')) { // GIF
+              throw new Error('Downloaded file does not appear to be a valid image');
+            }
+          }
+          
+          // Check for valid image signature (magic numbers)
+          const hex = imageResponse.data.toString('hex', 0, 8);
+          const isValidImage = 
+            hex.startsWith('ffd8ff') ||    // JPEG
+            hex.startsWith('89504e47') ||  // PNG
+            hex.startsWith('47494638') ||  // GIF
+            hex.startsWith('52494646') ||  // WEBP (RIFF)
+            hex.startsWith('424d');        // BMP
+            
+          if (!isValidImage) {
+            throw new Error('File does not have a valid image format signature');
+          }
+          
+          return {
+            data: imageResponse.data,
+            contentType: contentType.includes('image/') ? contentType : 'image/jpeg'
+          };
+        } catch (error) {
+          // Log the specific error
+          console.error(`[NEWS BOT] Error downloading image from ${imageUrl}: ${error.message}`);
+          
+          // If this is a timeout or network error, provide a clearer message
+          if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            throw new Error('Image download timed out');
+          }
+          
+          // If this is a 404 or other HTTP error
+          if (error.response) {
+            throw new Error(`Image download failed with status ${error.response.status}`);
+          }
+          
+          // Rethrow the original error
+          throw error;
+        }
       },
       
       /**
@@ -481,6 +605,9 @@ module.exports = {
             return { success: false, error: `Bot status is not active. Current status: ${bot.status}` };
           }
           
+          // Clean the image URL
+          imageUrl = imageUrl.trim();
+          
           // Ensure authentication
           if (!bot.authToken) {
             const authenticated = await bot.authenticate();
@@ -505,19 +632,74 @@ module.exports = {
           
           try {
             // Download the image
-            const image = await bot.downloadImage(imageUrl);
+            let image = null;
+            try {
+              image = await bot.downloadImage(imageUrl);
+              
+              // Verify we got a valid image
+              if (!image || !image.data || image.data.length < 1000) {
+                throw new Error('Downloaded image is too small or invalid');
+              }
+            } catch (downloadError) {
+              logger.error(`News bot failed to download image: ${downloadError.message}`);
+              console.error(`[NEWS BOT] Image download failed: ${downloadError.message}`);
+              
+              // If we're debugging, post without image
+              if (DEBUG) {
+                console.log(`[NEWS BOT] DEBUG MODE: Would post without image, but skipping instead`);
+              }
+              
+              return { 
+                success: false, 
+                error: `Image download failed: ${downloadError.message}`, 
+                skipped: true 
+              };
+            }
             
             // Prepare form data
-            const formData = bot.prepareImageFormData(
-              content, 
-              image.data, 
-              image.contentType, 
-              messageId, 
-              location
-            );
+            let formData;
+            try {
+              formData = bot.prepareImageFormData(
+                content, 
+                image.data, 
+                image.contentType, 
+                messageId, 
+                location
+              );
+            } catch (formError) {
+              logger.error(`News bot failed to prepare form data: ${formError.message}`);
+              console.error(`[NEWS BOT] Form preparation failed: ${formError.message}`);
+              return { 
+                success: false, 
+                error: `Form preparation failed: ${formError.message}`,
+                skipped: true 
+              };
+            }
             
             // Send the request
-            const response = await bot.sendFormData(formData);
+            let response;
+            try {
+              response = await bot.sendFormData(formData);
+            } catch (sendError) {
+              // Check if error contains Cloudinary's "Invalid image file" message
+              if (sendError.response && 
+                  sendError.response.data && 
+                  sendError.response.data.details && 
+                  sendError.response.data.details.message === 'Invalid image file') {
+                    
+                logger.error('News bot received Invalid image file error from Cloudinary');
+                console.error(`[NEWS BOT] Server rejected image as invalid. Content type: ${image.contentType}, Size: ${image.data.length} bytes`);
+                
+                return { 
+                  success: false, 
+                  error: 'Server rejected image as invalid',
+                  skipped: true 
+                };
+              }
+              
+              // Re-throw for other errors
+              throw sendError;
+            }
             
             // Process response
             if (response.data && response.data.success) {
