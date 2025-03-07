@@ -353,46 +353,47 @@ AppContent.propTypes = {
 
 // Extract nested function to reduce nesting depth
 const createFallbackLocation = (messagesArray) => {
-  // First, try to use recent message locations if available
-  const recentMessages = messagesArray || [];
-  const messagesWithLocation = recentMessages.filter(msg => 
-    msg.location && !msg.location.error && 
-    msg.location.latitude && msg.location.longitude
+  console.log('Creating fallback location from messages array');
+  
+  // Try to find a location from existing messages
+  const messagesWithLocation = messagesArray.filter(msg => 
+    msg.location && msg.location.latitude && msg.location.longitude
   );
   
   if (messagesWithLocation.length > 0) {
-    // Use the most recent message location with a small random variation
-    const lastMsg = messagesWithLocation[messagesWithLocation.length - 1];
-    const latVariation = (Math.random() - 0.5) * 0.01; // Small variation (~1km)
-    const lngVariation = (Math.random() - 0.5) * 0.01;
+    console.log('Found location in existing messages');
+    // Use the most recent message with location
+    const recentMessage = messagesWithLocation[messagesWithLocation.length - 1];
     
     return {
-      latitude: lastMsg.location.latitude + latVariation,
-      longitude: lastMsg.location.longitude + lngVariation,
-      isFallback: true
+      latitude: recentMessage.location.latitude,
+      longitude: recentMessage.location.longitude,
+      fuzzyLocation: true // Use fuzzyLocation property for MongoDB compatibility
     };
   }
   
-  // Default fallback to NYC if no better data is available
-  const randomLat = 40.730610 + (Math.random() - 0.5) * 0.1;
-  const randomLng = -73.935242 + (Math.random() - 0.5) * 0.1;
-  return { 
-    latitude: randomLat, 
-    longitude: randomLng,
-    isFallback: true 
+  // If no message locations found, use default location (NYC)
+  console.log('No message locations found, using default location');
+  return {
+    latitude: 40.7128,
+    longitude: -74.0060,
+    fuzzyLocation: true,
+    error: false
   };
 };
 
 // Create a slightly varied location (within ~500m)
 const createVariedLocation = (baseLocation) => {
-  // Create a slightly varied location (within ~500m)
-  const latVariation = (Math.random() - 0.5) * 0.005;
-  const lngVariation = (Math.random() - 0.5) * 0.005;
+  if (!baseLocation) return null;
+  
+  // Add a small random offset (within 100-200m) to prevent stacking markers
+  const latVariation = (Math.random() - 0.5) * 0.003;
+  const lngVariation = (Math.random() - 0.5) * 0.003;
   
   return {
     latitude: baseLocation.latitude + latVariation,
     longitude: baseLocation.longitude + lngVariation,
-    isFallback: true
+    fuzzyLocation: true // Use fuzzyLocation property instead of isFallback
   };
 };
 
@@ -405,7 +406,7 @@ const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
     return {
       latitude: baseLocation.latitude,
       longitude: baseLocation.longitude,
-      isFallback: baseLocation.isFallback
+      fuzzyLocation: false
     };
   }
   
@@ -417,7 +418,7 @@ const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
   return {
     latitude: baseLocation.latitude + latVariation,
     longitude: baseLocation.longitude + lngVariation,
-    isFallback: true // Mark as not exact location
+    fuzzyLocation: true // Mark as fuzzy location to match MongoDB schema
   };
 };
 
@@ -812,10 +813,10 @@ function App() {
       // Generate fallback location only if no valid location exists
       messageLocation = createFallbackLocation(messages);
       console.log('Using fallback location:', messageLocation);
-    } else if (messageLocation.isFallback) {
-      // Only vary fallback locations, not real user locations
+    } else if (messageLocation.fuzzyLocation) {
+      // Only vary locations that are already fuzzy
       messageLocation = createVariedLocation(messageLocation);
-      console.log('Using varied fallback location:', messageLocation);
+      console.log('Using varied location:', messageLocation);
     } else {
       // Apply fuzzy location if requested
       messageLocation = createFuzzyLocation(messageLocation, useFuzzyLocation);

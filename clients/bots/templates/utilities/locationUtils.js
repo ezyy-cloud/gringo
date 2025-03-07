@@ -84,9 +84,6 @@ const extractLocationNames = (title, description, debug = false) => {
     }
   });
   
-  // Add hardcoded locations
-  addHardcodedLocations(combinedText, locations);
-  
   if (debug && locations.size > 0) {
     console.log(`Extracted potential locations:`, Array.from(locations));
   }

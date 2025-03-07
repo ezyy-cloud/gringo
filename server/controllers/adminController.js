@@ -87,93 +87,108 @@ exports.getDashboardStats = async (req, res) => {
       }
     ]);
 
-    // Get top locations from messages
-    const topLocations = await Message.aggregate([
-      {
-        $match: {
-          'location.latitude': { $exists: true, $ne: null },
-          'location.longitude': { $exists: true, $ne: null }
-        }
-      },
-      {
-        $project: {
-          name: { 
-            $concat: [
-              "Message ", 
-              { $substr: [{ $toString: "$messageId" }, 0, 8] },
-              " - ",
-              { $substr: ["$text", 0, 20] }
-            ]
-          },
-          count: { $literal: 1 },
-          coordinates: [
-            "$location.longitude", 
-            "$location.latitude"
-          ],
-          text: { $substr: ["$text", 0, 50] }
-        }
-      },
-      {
-        $sort: { createdAt: -1 }
-      },
-      {
-        $limit: 200 // Limit to 200 most recent messages with location data
-      }
-    ]);
+    // Initialize variables with default values
+    let topLocations = [];
+    let totalLocations = 0;
 
-    // Count total unique locations (rounded to 2 decimal places for proximity grouping)
-    const uniqueLocationsCount = await Message.aggregate([
-      {
-        $match: {
-          'location.latitude': { $exists: true, $ne: null },
-          'location.longitude': { $exists: true, $ne: null }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            lat: { $round: ["$location.latitude", 2] },
-            lng: { $round: ["$location.longitude", 2] }
+    try {
+      // Get top locations from messages
+      topLocations = await Message.aggregate([
+        {
+          $match: {
+            'location.latitude': { $exists: true, $ne: null },
+            'location.longitude': { $exists: true, $ne: null }
           }
+        },
+        {
+          $project: {
+            name: { 
+              $concat: [
+                "Message ", 
+                { $substr: [{ $toString: "$messageId" }, 0, 8] },
+                " - ",
+                { $substr: ["$text", 0, 20] }
+              ]
+            },
+            count: { $literal: 1 },
+            coordinates: [
+              "$location.longitude", 
+              "$location.latitude"
+            ],
+            text: { $substr: ["$text", 0, 50] },
+            messageId: 1
+          }
+        },
+        {
+          $sort: { createdAt: -1 }
+        },
+        {
+          $limit: 200 // Limit to 200 most recent messages with location data
         }
-      },
-      {
-        $count: "totalLocations"
-      }
-    ]);
+      ]);
+
+      // Count total unique locations (rounded to 2 decimal places for proximity grouping)
+      const uniqueLocationsCount = await Message.aggregate([
+        {
+          $match: {
+            'location.latitude': { $exists: true, $ne: null },
+            'location.longitude': { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              lat: { $round: ["$location.latitude", 2] },
+              lng: { $round: ["$location.longitude", 2] }
+            }
+          }
+        },
+        {
+          $count: "totalLocations"
+        }
+      ]);
+
+      // Extract the count value or default to 0 if no locations
+      totalLocations = uniqueLocationsCount.length > 0 ? uniqueLocationsCount[0].totalLocations : 0;
+    } catch (locationError) {
+      console.error('Error processing location data:', locationError);
+      // Continue with empty locations data rather than failing the entire request
+    }
 
     // Get bot type distribution
-    const botTypes = await Bot.aggregate([
-      {
-        $match: { isBot: true }
-      },
-      {
-        $group: {
-          _id: '$type',
-          count: { $sum: 1 }
+    let botTypeDistribution = [];
+    try {
+      const botTypes = await Bot.aggregate([
+        {
+          $match: { isBot: true }
+        },
+        {
+          $group: {
+            _id: '$type',
+            count: { $sum: 1 }
+          }
         }
-      }
-    ]);
-    
-    // Format bot types for chart
-    let botTypeDistribution = botTypes.map(type => ({
-      name: type._id || 'default',
-      value: type.count
-    }));
+      ]);
+      
+      // Format bot types for chart
+      botTypeDistribution = botTypes.map(type => ({
+        name: type._id || 'default',
+        value: type.count
+      }));
+    } catch (botTypeError) {
+      console.error('Error processing bot type distribution:', botTypeError);
+    }
     
     // If no bot types data, provide sample data
     if (botTypeDistribution.length === 0) {
       const botUtils = require('../utils/botUtils');
-      const validTypes = botUtils.VALID_BOT_TYPES;
+      const validTypes = botUtils.VALID_BOT_TYPES || ['ChatGPT', 'Claude', 'Gemini', 'Custom'];
       
       botTypeDistribution = validTypes.map(type => ({
         name: type,
         value: Math.floor(Math.random() * 5) + 1 // Random count between 1-5
       }));
     }
-
-    // Extract the count value or default to 0 if no locations
-    const totalLocations = uniqueLocationsCount.length > 0 ? uniqueLocationsCount[0].totalLocations : 0;
 
     res.status(200).json({
       success: true,
