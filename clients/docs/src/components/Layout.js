@@ -15,6 +15,7 @@ import {
   useMediaQuery,
   Divider,
   Collapse,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -36,6 +37,8 @@ import {
   Storage as StorageIcon,
   PhoneAndroid as MobileIcon,
   LocationOn as LocationIcon,
+  Brightness4 as DarkModeIcon,
+  Brightness7 as LightModeIcon,
 } from '@mui/icons-material';
 
 import Home from '../pages/Home';
@@ -101,7 +104,7 @@ const menuSections = [
   },
 ];
 
-function Layout() {
+function Layout({ toggleColorMode, mode }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -180,9 +183,14 @@ function Layout() {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Gringo Platform Documentation
           </Typography>
+          <Tooltip title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+            <IconButton color="inherit" onClick={toggleColorMode} edge="end">
+              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
 
