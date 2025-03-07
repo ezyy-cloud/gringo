@@ -1,8 +1,12 @@
 import axios from 'axios';
 
+// Debug: Log the API URL being used
+const apiUrl = import.meta.env.VITE_API_URL || '/api';
+console.log('API URL being used:', apiUrl);
+
 // Create axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: apiUrl,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -12,6 +16,9 @@ const api = axios.create({
 // Add a request interceptor to include the auth token in all requests
 api.interceptors.request.use(
   (config) => {
+    // Debug: Log the request URL
+    console.log('Making request to:', config.baseURL + config.url);
+    
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -44,6 +51,7 @@ export const login = (email: string, password: string) =>
   api.post('/auth/login', { credential: email, password })
     .catch(error => {
       console.error('Login API error:', error.response?.data || error.message);
+      console.error('Full request URL:', api.defaults.baseURL + '/auth/login');
       throw error;
     });
 export const getCurrentUser = () => api.get('/auth/me');

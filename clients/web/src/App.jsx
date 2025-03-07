@@ -424,28 +424,50 @@ const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
 
 // Function to properly handle geolocation success
 const handleGeolocationSuccess = (position, setLocationFunction) => {
-  if (!position || !position.coords) {
+  try {
+    // Extract coordinates from the Geolocation API response
+    const { latitude, longitude } = position.coords;
     
-    return;
+    // Check for valid coordinates
+    if (!isNaN(latitude) && !isNaN(longitude)) {
+      const locationData = {
+        latitude,
+        longitude,
+        fuzzyLocation: false, // This is a real location, not a fuzzy one
+        error: false,
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp
+      };
+      
+      console.log("Successfully got geolocation:", locationData);
+      setLocationFunction(locationData);
+    } else {
+      console.error("Invalid coordinates in geolocation result:", position);
+      setLocationFunction(prevLocation => handleLocationFallback(prevLocation));
+    }
+  } catch (error) {
+    console.error("Error processing geolocation result:", error);
+    setLocationFunction(prevLocation => handleLocationFallback(prevLocation));
   }
-  
-  const { latitude, longitude } = position.coords;
-  
-  // Use the exact coordinates from the browser's geolocation API
-  // The isFallback flag is set to false because this is the actual user location
-  setLocationFunction({
-    latitude,
-    longitude,
-    isFallback: false // This is real location data, not a fallback
-  });
 };
 
 // Extract function for handling location fallback to reduce nesting
 const handleLocationFallback = (prevLocation) => {
-  if (!prevLocation) {
-    return createFallbackLocation([]);
+  console.log('Handling location fallback');
+  // If we previously had a valid location, return that
+  if (prevLocation && !prevLocation.error) {
+    console.log('Using previous valid location');
+    return prevLocation;
   }
-  return prevLocation;
+  
+  // Otherwise return a default location (NYC)
+  console.log('No previous valid location, using default');
+  return {
+    latitude: 40.7128,
+    longitude: -74.0060,
+    fuzzyLocation: true,
+    error: false
+  };
 };
 
 // Extract function to filter old messages to reduce nesting
