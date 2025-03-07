@@ -45,6 +45,27 @@
 /* Enhance popup appearance to match timeline cards */
 .mapboxgl-popup {
   max-width: 350px !important;
+  z-index: 15; /* Higher z-index to ensure popups always appear above markers */
+}
+
+/* Style specific for when 3D mode is active */
+.is-3d-mode .mapboxgl-popup {
+  z-index: 30; /* Even higher z-index in 3D mode to overcome any potential 3D layer stacking */
+  margin-top: -40px; /* Set to exactly 40px as requested */
+  transform: translateY(-40px); /* Set to exactly 40px as requested */
+}
+
+/* Adjust the popup tip in 3D mode */
+.is-3d-mode .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  border-top-color: white; /* Match the popup content background */
+  position: relative;
+  top: 2px; /* Move tip down slightly to better connect with content */
+}
+
+.is-3d-mode.dark-mode .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  border-top-color: #242526; /* Match dark mode popup content background */
+  position: relative;
+  top: 2px; /* Move tip down slightly to better connect with content */
 }
 
 .mapboxgl-popup-content {
@@ -55,6 +76,7 @@
   width: 100%;
   max-width: 350px;
   background-color: transparent; /* Reset background to let message card show through */
+  z-index: 20; /* Ensure content is above potential 3D elements */
 }
 
 .dark-mode .mapboxgl-popup-content {

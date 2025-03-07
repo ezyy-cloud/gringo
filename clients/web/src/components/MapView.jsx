@@ -431,7 +431,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   };
 
   return (
-    <div className="map-container">
+    <div className={`map-container ${is3DMode ? 'is-3d-mode' : ''}`}>
       <ReactMapGL
         ref={mapRef}
         {...viewState}
@@ -479,7 +479,8 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           <Popup
             longitude={selectedMessage.location.longitude}
             latitude={selectedMessage.location.latitude}
-            anchor="top"
+            anchor={is3DMode ? "bottom" : "top"}
+            offsetTop={is3DMode ? -40 : 0}
             onClose={() => setSelectedMessage(null)}
             closeOnClick={false}
             closeButton={true}
