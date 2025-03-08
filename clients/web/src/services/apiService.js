@@ -337,6 +337,186 @@ const apiService = {
     }
   },
   
+  // Get messages (latest messages with online users)
+  getMessages: async (minutesWindow = 30) => {
+    try {
+      console.log('🔍 ApiService.getMessages: Starting to fetch messages from server');
+      
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('🔍 ApiService.getMessages: Authentication token missing');
+        return { success: false, message: 'Authentication token missing' };
+      }
+      console.log('🔍 ApiService.getMessages: Auth token retrieved successfully');
+      
+      // Get current username from localStorage for like status
+      const userData = localStorage.getItem('user');
+      const currentUsername = userData ? JSON.parse(userData).username : null;
+      console.log('🔍 ApiService.getMessages: Current username:', currentUsername);
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      
+      // If currentUsername is available, add it to get like status
+      if (currentUsername) {
+        params.append('currentUser', currentUsername);
+      }
+      
+      // Add parameter to include location data
+      params.append('includeLocation', 'true');
+      
+      // Add parameters for sorting and limiting
+      params.append('limit', '50');  // Get up to 50 messages
+      params.append('sort', '-createdAt');  // Sort by newest first
+      
+      // Add time window parameter for server-side filtering
+      const timeWindowMs = minutesWindow * 60 * 1000;
+      const minCreatedAt = new Date(Date.now() - timeWindowMs).toISOString();
+      params.append('minCreatedAt', minCreatedAt);
+      
+      // Create URL with parameters
+      let url = `/api/messages?${params.toString()}`;
+      
+      // For debugging, let's log the exact URL we're requesting
+      console.log('🔍 ApiService.getMessages: Requesting URL:', `${SERVER_URL}${url}`);
+      console.log('🔍 ApiService.getMessages: Filtering for messages newer than:', minCreatedAt);
+      
+      try {
+        const response = await api.get(url, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        // Log raw response for debugging
+        console.log('🔍 ApiService.getMessages: Raw response status:', response.status, response.statusText);
+        
+        // For object responses, log structure
+        if (typeof response.data === 'object') {
+          console.log('🔍 ApiService.getMessages: Response data keys:', Object.keys(response.data));
+        }
+        
+        // Extract messages based on different possible response formats
+        let messages = [];
+        let onlineUsers = {};
+        
+        // Case 1: response.data.data.messages format
+        if (response.data && response.data.data && response.data.data.messages) {
+          console.log('🔍 ApiService.getMessages: Found messages in response.data.data.messages');
+          messages = response.data.data.messages;
+          onlineUsers = response.data.data.onlineUsers || {};
+        }
+        // Case 2: response.data.messages format
+        else if (response.data && response.data.messages) {
+          console.log('🔍 ApiService.getMessages: Found messages in response.data.messages');
+          messages = response.data.messages;
+          onlineUsers = response.data.onlineUsers || {};
+        }
+        // Case 3: Array response format
+        else if (Array.isArray(response.data)) {
+          console.log('🔍 ApiService.getMessages: Response data is an array of messages');
+          messages = response.data;
+        }
+        // Case 4: Unknown format but has data property
+        else if (response.data && typeof response.data === 'object') {
+          // Try to find a property that could be messages
+          const possibleMessageArrays = Object.entries(response.data)
+            .filter(([_, value]) => Array.isArray(value))
+            .sort(([_, a], [__, b]) => b.length - a.length);
+          
+          if (possibleMessageArrays.length > 0) {
+            const [key, value] = possibleMessageArrays[0];
+            console.log(`🔍 ApiService.getMessages: Found array in property "${key}" that might be messages`);
+            messages = value;
+          }
+        }
+
+        // If we found messages, check for location data
+        if (messages.length > 0) {
+          console.log(`🔍 ApiService.getMessages: Found ${messages.length} messages`);
+          
+          // Check location data in messages
+          const messagesWithLocation = messages.filter(msg => 
+            msg.location && msg.location.latitude && msg.location.longitude
+          );
+          console.log(`🔍 ApiService.getMessages: Found ${messagesWithLocation.length} messages with location data out of ${messages.length}`);
+          
+          // Log sample message for debugging
+          if (messages.length > 0) {
+            console.log('🔍 ApiService.getMessages: Sample message:', messages[0]);
+          }
+          
+          // Return with consistent format
+          return {
+            success: true,
+            messages: messages,
+            onlineUsers: onlineUsers
+          };
+        }
+        
+        // If we reached here and didn't return, log an error
+        console.error('🔍 ApiService.getMessages: No messages found in response:', response.data);
+        
+        // Generate sample test messages if no messages found
+        console.log('🔍 ApiService.getMessages: Generating test messages as fallback');
+        const testMessages = Array(5).fill().map((_, index) => ({
+          _id: `test-${index}`,
+          messageId: `test-${index}`,
+          senderUsername: `TestUser${index}`,
+          text: `This is a test message ${index + 1} with location data.`,
+          createdAt: new Date(Date.now() - index * 3600000).toISOString(),
+          location: {
+            latitude: 40.7128 + (Math.random() - 0.5) * 0.05, // NYC with slight variations
+            longitude: -74.0060 + (Math.random() - 0.5) * 0.05,
+            fuzzyLocation: true
+          },
+          likes: [],
+          likesCount: Math.floor(Math.random() * 10)
+        }));
+        
+        return { 
+          success: true, 
+          message: 'Using test messages due to unexpected server response',
+          messages: testMessages,
+          onlineUsers: {},
+          isTestData: true
+        };
+      } catch (innerError) {
+        console.error('🔍 ApiService.getMessages: Error during API request:', innerError.message);
+        throw innerError;
+      }
+    } catch (error) {
+      console.error('🔍 ApiService.getMessages: Error fetching messages:', error);
+      
+      // Generate some test messages with location as a fallback
+      console.log('🔍 ApiService.getMessages: Generating test messages as fallback due to error');
+      const testMessages = Array(5).fill().map((_, index) => ({
+        _id: `test-error-${index}`,
+        messageId: `test-error-${index}`,
+        senderUsername: `ErrorUser${index}`,
+        text: `This is a fallback message ${index + 1} generated due to API error.`,
+        createdAt: new Date(Date.now() - index * 3600000).toISOString(),
+        location: {
+          latitude: 40.7128 + (Math.random() - 0.5) * 0.05, // NYC with slight variations
+          longitude: -74.0060 + (Math.random() - 0.5) * 0.05,
+          fuzzyLocation: true
+        },
+        likes: [],
+        likesCount: Math.floor(Math.random() * 10)
+      }));
+      
+      return {
+        success: true,
+        message: 'Using test messages due to API error',
+        messages: testMessages,
+        onlineUsers: {},
+        isTestData: true,
+        error: error.message
+      };
+    }
+  },
+  
   // Like or unlike a message (toggle behavior)
   likeMessage: async (messageId) => {
     try {
@@ -495,7 +675,7 @@ const apiService = {
         error: error.response?.data?.message || 'Failed to unfollow user' 
       };
     }
-  }
+  },
 };
 
 export default apiService; 

@@ -1,0 +1,32 @@
+.floating-action-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #4a80f5;
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 900;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.floating-action-button:hover {
+  background-color: #3a70e5;
+  transform: scale(1.05);
+}
+
+.floating-action-button:active {
+  transform: scale(0.95);
+}
+
+/* Dark mode styles */
+.floating-action-button.dark-mode {
+  background-color: #5a90ff;
+} 

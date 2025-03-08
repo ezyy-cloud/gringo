@@ -1,0 +1,38 @@
+.offline-fallback {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: white;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.offline-content {
+  padding: 2rem;
+  max-width: 400px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: white;
+}
+
+.offline-icon {
+  margin: 2rem 0;
+  color: #888;
+}
+
+/* Dark mode styles */
+@media (prefers-color-scheme: dark) {
+  .offline-fallback {
+    background-color: #121212;
+  }
+  
+  .offline-content {
+    background-color: #1e1e1e;
+    color: white;
+  }
+} 

@@ -28,10 +28,10 @@ function App() {
   const [userLocation, setUserLocation] = useState(null)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [notifications, setNotifications] = useState([])
-  
+
   // Define state for messages timestamp (used for refreshing)
   const [, setMessagesTimestamp] = useState(Date.now())
-
+  
   // Add context
   const { isOffline } = useContext(AppContext);
   
@@ -71,7 +71,7 @@ function App() {
         setIsLoading(false);
       }
     };
-    
+
     console.log('🔍 App: Running initial authentication check');
     checkAuth();
     
@@ -85,6 +85,22 @@ function App() {
       setIsDarkMode(prefersDarkMode);
     }
   }, []);
+  
+  // Add event listener for map-initiated message fetching
+  useEffect(() => {
+    const fetchMessagesHandler = () => {
+      console.log('🔍 App: Received fetchMessages request from MapView');
+      fetchMessagesWithoutReset();
+    };
+    
+    // Add event listener
+    window.addEventListener('map:fetchMessages', fetchMessagesHandler);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('map:fetchMessages', fetchMessagesHandler);
+    };
+  }, []);  // Empty dependency array means this runs once on mount
   
   // Get user location and set up auto-update
   useEffect(() => {
@@ -108,13 +124,13 @@ function App() {
       
       const geolocationOptions = {
         enableHighAccuracy: true,
-        timeout: 10000,
+          timeout: 10000,
         maximumAge: 300000 // 5 minutes
       };
       
       // Try to get high accuracy position first
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
           console.log("High accuracy position succeeded");
           const location = {
             latitude: position.coords.latitude,
@@ -128,11 +144,11 @@ function App() {
           setUserLocation(location);
         },
         () => {
-          console.log("High accuracy position failed, trying low accuracy...");
-          // Try again with lower accuracy if high accuracy fails
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              console.log("Low accuracy position succeeded");
+              console.log("High accuracy position failed, trying low accuracy...");
+              // Try again with lower accuracy if high accuracy fails
+              navigator.geolocation.getCurrentPosition(
+                (position) => {
+                  console.log("Low accuracy position succeeded");
               const location = {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
@@ -226,54 +242,54 @@ function App() {
         }
       },
       onMessageLiked: (data) => {
-          // Update any displayed message with the new like count
-          if (data && data.messageId) {
-            setMessages(prevMessages => 
-              prevMessages.map(msg => 
-                msg.dbId === data.messageId ? 
-                  { ...msg, likesCount: data.likesCount } : 
-                  msg
-              )
-            );
-            
-            // If the current user liked this message, update their likedMessages
-            if (user && data.likedByUsername === user.username) {
-              // Force a refresh of profile cards with a new timestamp
-              updateMessagesTimestamp();
-            }
-          }
-        },
-      onMessageUnliked: (data) => {
-          // Update any displayed message with the new like count
-          if (data && data.messageId) {
-            setMessages(prevMessages => 
-              prevMessages.map(msg => 
-                msg.dbId === data.messageId ? 
-                  { ...msg, likesCount: data.likesCount } : 
-                  msg
-              )
-            );
-            
-            // If the current user unliked this message, update their likedMessages
-            if (user && data.unlikedByUsername === user.username) {
-              // Force a refresh of profile cards with a new timestamp
-              updateMessagesTimestamp();
-            }
-          }
-        },
-      onMessageDeleted: (data) => {
-          console.log('⚡ Socket: Message deleted', data);
+        // Update any displayed message with the new like count
+        if (data && data.messageId) {
+          setMessages(prevMessages => 
+            prevMessages.map(msg => 
+              msg.dbId === data.messageId ? 
+                { ...msg, likesCount: data.likesCount } : 
+                msg
+            )
+          );
           
-          // Remove the deleted message from the messages list
-          if (data && data.messageId) {
-            setMessages(prevMessages => 
-              prevMessages.filter(msg => msg.dbId !== data.messageId)
-            );
-            
-            // Force a refresh of profile cards since a message was deleted
+          // If the current user liked this message, update their likedMessages
+          if (user && data.likedByUsername === user.username) {
+            // Force a refresh of profile cards with a new timestamp
             updateMessagesTimestamp();
           }
-        },
+        }
+      },
+      onMessageUnliked: (data) => {
+        // Update any displayed message with the new like count
+        if (data && data.messageId) {
+          setMessages(prevMessages => 
+            prevMessages.map(msg => 
+              msg.dbId === data.messageId ? 
+                { ...msg, likesCount: data.likesCount } : 
+                msg
+            )
+          );
+          
+          // If the current user unliked this message, update their likedMessages
+          if (user && data.unlikedByUsername === user.username) {
+            // Force a refresh of profile cards with a new timestamp
+            updateMessagesTimestamp();
+          }
+        }
+      },
+      onMessageDeleted: (data) => {
+        console.log('⚡ Socket: Message deleted', data);
+        
+        // Remove the deleted message from the messages list
+        if (data && data.messageId) {
+          setMessages(prevMessages => 
+            prevMessages.filter(msg => msg.dbId !== data.messageId)
+          );
+          
+          // Force a refresh of profile cards since a message was deleted
+          updateMessagesTimestamp();
+        }
+      },
       onNotificationClick: (data) => {
         // Handle notification click by navigating to the relevant page
         if (data.sender) {
@@ -453,32 +469,162 @@ function App() {
   };
 
   // Fetch messages function that doesn't reset view
-  const fetchMessagesWithoutReset = async () => {
+  const fetchMessagesWithoutReset = async (retryCount = 0) => {
     // Skip if offline
     if (isOffline) {
-      console.log('Offline, skipping message fetch');
+      console.log('🔄 fetchMessagesWithoutReset: Offline, skipping message fetch');
       return;
     }
     
+    console.log('🔄 fetchMessagesWithoutReset: Starting to fetch messages');
+    
     try {
       setIsLoading(true);
+      console.log('🔄 fetchMessagesWithoutReset: Set loading state to true');
       
+      console.log('🔄 fetchMessagesWithoutReset: About to call apiService.getMessages()');
       const response = await apiService.getMessages();
-      if (response.success) {
-        // Replace messages with new data
-        setMessages(response.messages || []);
+      console.log('🔄 fetchMessagesWithoutReset: Response received:', response);
+      
+      if (response && response.success) {
+        console.log('🔄 fetchMessagesWithoutReset: Response was successful');
+        
+        // Check if messages array exists and has items
+        if (response.messages && Array.isArray(response.messages)) {
+          console.log(`🔄 fetchMessagesWithoutReset: Found ${response.messages.length} messages in response`);
+          
+          // Format messages correctly for the MapView component
+          const formattedMessages = response.messages.map(msg => {
+            // Create timestamp as a Date object for proper time formatting
+            let timestamp;
+            try {
+              // Try to parse timestamps from various formats
+              if (msg.createdAt) {
+                if (typeof msg.createdAt === 'string') {
+                  timestamp = new Date(msg.createdAt);
+                } else if (msg.createdAt.$date) { // MongoDB format
+                  timestamp = new Date(msg.createdAt.$date);
+                } else {
+                  timestamp = new Date(msg.createdAt);
+                }
+              } else if (msg.timestamp) {
+                timestamp = new Date(msg.timestamp);
+              } else {
+                timestamp = new Date(); // Fallback to current time
+              }
+              
+              // Check if timestamp is valid
+              if (isNaN(timestamp.getTime())) {
+                console.log('🔄 Invalid timestamp for message:', msg);
+                timestamp = new Date(); // Fallback to current time
+              }
+            } catch (error) {
+              console.error('🔄 Error parsing timestamp:', error);
+              timestamp = new Date(); // Fallback to current time
+            }
+            
+            return {
+              // Message ID - could be _id or messageId
+              dbId: msg._id || msg.id || msg.messageId || null,
+              
+              // Sender information
+              sender: msg.senderUsername || msg.sender || 'Unknown',
+              
+              // Content - could be text or content
+              content: msg.text || msg.content || '',
+              
+              // Timestamp as Date object
+              timestamp: timestamp,
+              
+              // Image URL if available
+              image: msg.image || null,
+              
+              // Location data
+              location: msg.location || null,
+              
+              // Likes information
+              likesCount: msg.likesCount || (msg.likes ? msg.likes.length : 0) || 0,
+              likedByCurrentUser: msg.likedByCurrentUser || false,
+              
+              // Mark as received from server
+              isReceived: true
+            };
+          });
+          
+          console.log('🔄 Formatted messages for MapView:', formattedMessages);
+          
+          // Filter messages to only show those from the last 30 minutes
+          const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+          const recentMessages = formattedMessages.filter(msg => {
+            // Make sure we're comparing Date objects
+            const messageTime = msg.timestamp instanceof Date ? 
+              msg.timestamp : new Date(msg.timestamp);
+            
+            // Check if message is from the last 30 minutes
+            return messageTime >= thirtyMinutesAgo;
+          });
+          
+          console.log(`🔄 Filtered to ${recentMessages.length} messages from the last 30 minutes (out of ${formattedMessages.length} total)`);
+          
+          // Check how many messages have location data
+          const messagesWithLocation = recentMessages.filter(msg => 
+            msg.location && msg.location.latitude && msg.location.longitude
+          );
+          console.log(`🔄 fetchMessagesWithoutReset: ${messagesWithLocation.length} out of ${recentMessages.length} messages have valid location data`);
+          
+          // If we have messages with location, log an example
+          if (messagesWithLocation.length > 0) {
+            console.log('🔄 fetchMessagesWithoutReset: Example message with location:', messagesWithLocation[0]);
+          } else {
+            console.log('🔄 fetchMessagesWithoutReset: No messages with location found.');
+          }
+          
+          // Replace messages with new filtered formatted data
+          console.log('🔄 fetchMessagesWithoutReset: Setting messages state with filtered data');
+          setMessages(recentMessages);
+        } else {
+          console.log('🔄 fetchMessagesWithoutReset: No messages array in response or empty array', response.messages);
+          
+          // If no messages and we haven't retried too many times, try again
+          if (retryCount < 2) {
+            console.log(`🔄 fetchMessagesWithoutReset: Retrying (attempt ${retryCount + 1})`);
+            setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 1000);
+            return;
+          }
+        }
         
         // Update online users
         if (response.onlineUsers) {
+          console.log('🔄 fetchMessagesWithoutReset: Setting onlineUsers state');
           setOnlineUsers(response.onlineUsers);
+        } else {
+          console.log('🔄 fetchMessagesWithoutReset: No onlineUsers in response');
         }
         
         // Update messages timestamp
+        console.log('🔄 fetchMessagesWithoutReset: Updating messages timestamp');
         updateMessagesTimestamp();
+      } else {
+        console.error('🔄 fetchMessagesWithoutReset: Response was not successful', response);
+        
+        // If error response and we haven't retried too many times, try again
+        if (retryCount < 2) {
+          console.log(`🔄 fetchMessagesWithoutReset: Retrying after error (attempt ${retryCount + 1})`);
+          setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 1000);
+          return;
+        }
       }
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('🔄 fetchMessagesWithoutReset: Error fetching messages:', error);
+      
+      // If error and we haven't retried too many times, try again
+      if (retryCount < 2) {
+        console.log(`🔄 fetchMessagesWithoutReset: Retrying after exception (attempt ${retryCount + 1})`);
+        setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 1000);
+        return;
+      }
     } finally {
+      console.log('🔄 fetchMessagesWithoutReset: Finished, setting loading state to false');
       setIsLoading(false);
     }
   };
@@ -496,11 +642,18 @@ function App() {
       setIsDarkMode(userObject.darkMode);
     }
     
+    // Explicitly fetch messages after successful authentication
+    console.log('🔐 handleAuthSuccess: Fetching messages after authentication');
+    setTimeout(() => {
+      // Use setTimeout to ensure user state is set before fetching messages
+      fetchMessagesWithoutReset();
+    }, 500);
+    
     // Force navigation to the home page after successful login, only if called from login form
     if (shouldRedirect) {
       console.log('🔐 handleAuthSuccess: shouldRedirect is true, navigating to homepage');
       window.location.href = '/';
-    } else {
+          } else {
       console.log('🔐 handleAuthSuccess: shouldRedirect is false, not redirecting');
     }
   };
@@ -538,7 +691,7 @@ function App() {
       updateUserDarkModePreference(newDarkMode);
     }
   };
-
+  
   // Update user dark mode preference in the database
   const updateUserDarkModePreference = async (darkMode) => {
     try {
@@ -550,7 +703,7 @@ function App() {
       console.error('Error updating dark mode preference:', error);
     }
   };
-
+  
   // When dark mode changes, apply it to the document
   useEffect(() => {
     // Add or remove dark-mode class from both root elements
@@ -571,6 +724,29 @@ function App() {
     setNotifications([]);
   };
 
+  // Periodically refresh messages when the user is logged in
+  useEffect(() => {
+    // Skip if user is not logged in
+    if (!user) {
+      console.log('🔄 Periodic refresh: User not logged in, skipping message refresh setup');
+      return;
+    }
+    
+    console.log('🔄 Periodic refresh: Setting up periodic message refresh');
+    
+    // Set up interval to refresh messages every minute
+    const messageRefreshInterval = setInterval(() => {
+      console.log('🔄 Periodic refresh: Refreshing messages');
+      fetchMessagesWithoutReset();
+    }, 60000); // Every 60 seconds
+    
+    // Clean up interval on component unmount or when user changes
+    return () => {
+      console.log('🔄 Periodic refresh: Cleaning up message refresh interval');
+      clearInterval(messageRefreshInterval);
+    };
+  }, [user]); // Re-run when user changes
+
   // If offline, show the offline fallback
   if (isOffline) {
     return <OfflineFallback messages={messages} isDarkMode={isDarkMode} />;
@@ -579,7 +755,7 @@ function App() {
   // If not logged in and not loading, show the auth screen
   if (!user && !isLoading) {
     console.log('🔎 Rendering Auth/Landing screen because user is null and not loading');
-    return (
+  return (
       <Router>
         <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
           {/* Show PWA install prompt */}
@@ -603,21 +779,21 @@ function App() {
   console.log('🔎 Rendering main AppContent because user exists:', user?.username);
   return (
     <Router>
-      <AppContent
-        user={user}
-        onlineUsers={onlineUsers}
-        messages={messages}
-        handleSocketMessage={handleShareUpdate}
-        isConnected={isConnected}
-        connectionError={connectionError}
-        handleLogout={handleLogout}
-        userLocation={userLocation}
-        isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
-        notifications={notifications}
-        onClearNotifications={handleClearNotifications}
-        isLoading={isLoading}
-      />
+          <AppContent
+            user={user}
+            onlineUsers={onlineUsers}
+            messages={messages}
+            handleSocketMessage={handleShareUpdate}
+            isConnected={isConnected}
+            connectionError={connectionError}
+            handleLogout={handleLogout}
+            userLocation={userLocation}
+            isDarkMode={isDarkMode}
+            toggleDarkMode={toggleDarkMode}
+            notifications={notifications}
+            onClearNotifications={handleClearNotifications}
+            isLoading={isLoading}
+          />
     </Router>
   );
 }
