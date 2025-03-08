@@ -10,6 +10,7 @@ const LoginForm = ({ onLoginSuccess, isDarkMode }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('Login form submitted with username:', username);
     
     if (!username.trim() || !password.trim()) {
       setError('Please enter both username and password');
@@ -20,14 +21,19 @@ const LoginForm = ({ onLoginSuccess, isDarkMode }) => {
     setError('');
     
     try {
+      console.log('Calling authService.login...');
       const result = await authService.login({ credential: username, password });
+      console.log('Login result:', result);
       
       if (result.success) {
+        console.log('Login successful, calling onLoginSuccess with user:', result.data.user);
         onLoginSuccess(result.data.user);
       } else {
+        console.error('Login failed:', result.message);
         setError(result.message || 'Login failed');
       }
     } catch (error) {
+      console.error('Error during login:', error);
       setError(error.message || 'An error occurred during login');
     } finally {
       setIsLoading(false);

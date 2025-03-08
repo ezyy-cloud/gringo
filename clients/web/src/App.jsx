@@ -1,516 +1,25 @@
-import { useState, useEffect, useContext, useCallback } from 'react'
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
-import { GoChevronLeft, GoKebabHorizontal, GoPerson, GoSun, GoMoon, GoSignOut } from "react-icons/go"
-import PropTypes from 'prop-types'
+import { useState, useEffect, useContext } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import socketService from './services/socketService'
 import apiService from './services/apiService'
 import authService from './services/authService'
-import MapView from './components/MapView'
-import FloatingActionButton from './components/FloatingActionButton'
-import MessageModal from './components/MessageModal'
+import AppContent from './components/AppContent'
 import Auth from './components/auth/Auth'
-import ProfilePage from './components/profile/ProfilePage'
-import NotificationBell from './components/NotificationBell'
 import OfflineFallback from './components/OfflineFallback'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
 import LandingPage from './components/LandingPage'
 import { AppContext } from './context/AppContext'
+import { 
+  createFallbackLocation, 
+  createVariedLocation, 
+  createFuzzyLocation,
+  filterOldMessages
+} from './utils/locationUtils'
+import { createNotification } from './utils/notificationUtils'
 import './App.css'
-
-// Navigation header with back button component
-const NavigationHeader = ({ onLogout, isDarkMode, toggleDarkMode, notifications, onClearNotifications }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  
-  // Show back button on routes other than home
-  const showBackButton = location.pathname !== '/';
-  
-  // Determine the page title based on the current route
-  const getPageTitle = () => {
-    if (location.pathname.startsWith('/profile')) {
-      return 'Profile';
-    }
-    return 'Gringo';
-  };
-  
-  // Handle dropdown toggle
-  const toggleDropdown = () => {
-    document.getElementById('dropdown-menu').classList.toggle('show');
-  };
-
-  // Handle closing the dropdown
-  const closeDropdown = () => {
-    const dropdown = document.getElementById('dropdown-menu');
-    if (dropdown?.classList.contains('show')) {
-      dropdown.classList.remove('show');
-    }
-  };
-
-  // Close the dropdown when clicking elsewhere on the page
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      const menuContainer = document.querySelector('.menu-container');
-      if (menuContainer && !menuContainer.contains(event.target)) {
-        closeDropdown();
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    
-    // Clean up event listener when component unmounts
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, []);
-  
-  // Handler for menu item click
-  const handleMenuItemClick = (action) => {
-    // Close the dropdown first
-    closeDropdown();
-    
-    // Perform the action (navigate or logout)
-    if (action === 'profile') {
-      navigate('/profile');
-    } else if (action === 'logout') {
-      onLogout();
-    } else if (action === 'toggleDarkMode') {
-      toggleDarkMode();
-    }
-  };
-  
-  return (
-    <header className="app-header">
-      {showBackButton && (
-        <button className="back-button" onClick={() => navigate(-1)}>
-          <GoChevronLeft />
-        </button>
-      )}
-      <h1>{getPageTitle()}</h1>
-      
-      <div className="header-actions">
-        {/* Only show NotificationBell if we have notifications prop */}
-        {notifications && (
-          <NotificationBell 
-            notifications={notifications} 
-            onClearNotifications={onClearNotifications}
-            isDarkMode={isDarkMode} 
-          />
-        )}
-        
-        <div className="menu-container">
-          <button className="menu-button" onClick={(e) => {
-            e.stopPropagation(); // Prevent immediate close by document click handler
-            toggleDropdown();
-          }}>
-            <GoKebabHorizontal className="menu-dots" />
-          </button>
-          <div id="dropdown-menu" className="dropdown-menu">
-            <button onClick={() => handleMenuItemClick('profile')} className="dropdown-item">
-              <span className="dropdown-icon"><GoPerson /></span> Profile
-            </button>
-            <button onClick={() => handleMenuItemClick('logout')} className="dropdown-item">
-              <span className="dropdown-icon"><GoSignOut /></span> Logout
-            </button>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-};
-
-// Add PropTypes validation for NavigationHeader
-NavigationHeader.propTypes = {
-  onLogout: PropTypes.func.isRequired,
-  isDarkMode: PropTypes.bool.isRequired,
-  toggleDarkMode: PropTypes.func.isRequired,
-  notifications: PropTypes.array,
-  onClearNotifications: PropTypes.func
-};
-
-// Component that combines navigation and routes
-const AppContent = ({ 
-  user, 
-  onlineUsers, 
-  messages, 
-  handleSocketMessage,
-  isConnected,
-  connectionError,
-  handleLogout,
-  userLocation,
-  isDarkMode,
-  toggleDarkMode,
-  notifications,
-  onClearNotifications,
-  isLoading
-}) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [countdownModalOpen, setCountdownModalOpen] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState(0);
-  const [countdownInterval, setCountdownInterval] = useState(null);
-
-  const closeModal = () => setIsModalOpen(false);
-  
-  const closeCountdownModal = () => {
-    setCountdownModalOpen(false);
-    if (countdownInterval) {
-      clearInterval(countdownInterval);
-      setCountdownInterval(null);
-    }
-  };
-
-  // Check if user can share an update (last update was more than 30 minutes ago)
-  const canUserShareUpdate = () => {
-    if (!user || !messages || messages.length === 0) return true;
-    
-    // Filter messages by current user
-    const userMessages = messages.filter(msg => msg.sender === user.username);
-    if (userMessages.length === 0) return true;
-    
-    // Get user's most recent message timestamp
-    const latestUserMessage = userMessages.reduce((latest, current) => {
-      return new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current;
-    }, userMessages[0]);
-    
-    // Calculate time difference
-    const thirtyMinutesInMs = 30 * 60 * 1000;
-    const now = new Date();
-    const lastMessageTime = new Date(latestUserMessage.timestamp);
-    const timeDifference = now - lastMessageTime;
-    
-    return timeDifference >= thirtyMinutesInMs;
-  };
-
-  // Calculate time remaining before user can share another update
-  const getTimeRemaining = () => {
-    if (!user || !messages || messages.length === 0) return 0;
-    
-    // Filter messages by current user
-    const userMessages = messages.filter(msg => msg.sender === user.username);
-    if (userMessages.length === 0) return 0;
-    
-    // Get user's most recent message timestamp
-    const latestUserMessage = userMessages.reduce((latest, current) => {
-      return new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current;
-    }, userMessages[0]);
-    
-    // Calculate time difference
-    const thirtyMinutesInMs = 30 * 60 * 1000;
-    const now = new Date();
-    const lastMessageTime = new Date(latestUserMessage.timestamp);
-    const timeDifference = now - lastMessageTime;
-    
-    return Math.max(0, thirtyMinutesInMs - timeDifference);
-  };
-
-  // Format milliseconds to minutes and seconds
-  const formatTimeRemaining = (ms) => {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
-
-  const openModal = () => {
-    if (canUserShareUpdate()) {
-      setIsModalOpen(true);
-    } else {
-      // Calculate initial time remaining
-      const initialTimeRemaining = getTimeRemaining();
-      setTimeRemaining(initialTimeRemaining);
-      
-      // Open countdown modal
-      setCountdownModalOpen(true);
-      
-      // Setup interval to update countdown
-      const interval = setInterval(() => {
-        setTimeRemaining(prevTime => {
-          const newTime = Math.max(0, prevTime - 1000);
-          
-          // If countdown reaches zero, clear interval and allow posting
-          if (newTime <= 0) {
-            clearInterval(interval);
-            setCountdownModalOpen(false);
-            return 0;
-          }
-          
-          return newTime;
-        });
-      }, 1000);
-      
-      // Store interval ID for cleanup
-      setCountdownInterval(interval);
-    }
-  };
-
-  // Clean up interval on unmount
-  useEffect(() => {
-    return () => {
-      if (countdownInterval) {
-        clearInterval(countdownInterval);
-      }
-    };
-  }, [countdownInterval]);
-
-  return (
-    <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
-      <NavigationHeader 
-        onLogout={handleLogout} 
-        isDarkMode={isDarkMode} 
-        toggleDarkMode={toggleDarkMode}
-        notifications={notifications}
-        onClearNotifications={onClearNotifications}
-      />
-      
-      {connectionError && <div className="connection-error">{connectionError}</div>}
-      
-      <Routes>
-        <Route path="/profile" element={<ProfilePage user={user} onlineUsers={onlineUsers} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
-        <Route path="/profile/:username" element={<ProfilePage onlineUsers={onlineUsers} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />} />
-        <Route path="/auth" element={<Navigate to="/" replace />} />
-        <Route path="/" element={
-          <>
-            <main className="app-main">
-              <div className="tab-content">
-                <MapView 
-                  messages={messages} 
-                  currentUsername={user ? user.username : null} 
-                  onlineUsers={onlineUsers}
-                  userLocation={userLocation}
-                  isDarkMode={isDarkMode}
-                  isLoading={isLoading}
-                />
-              </div>
-            </main>
-
-            {/* Floating Action Button for sharing updates */}
-            <FloatingActionButton onClick={openModal} isDarkMode={isDarkMode} />
-            
-            {/* Update Modal */}
-            <MessageModal 
-              isOpen={isModalOpen} 
-              onClose={closeModal} 
-              onShareUpdate={handleSocketMessage}
-              disabled={!isConnected || !user}
-              placeholder="What's happening around?"
-              isDarkMode={isDarkMode}
-            />
-            
-            {/* Countdown Modal */}
-            {countdownModalOpen && (
-              <div className="message-modal-overlay" onClick={closeCountdownModal}>
-                <div className={`message-modal ${isDarkMode ? 'dark-mode' : ''}`} onClick={e => e.stopPropagation()}>
-                  <div className="message-modal-header">
-                    <h3>Please Wait</h3>
-                    <button className="close-button" onClick={closeCountdownModal}>×</button>
-                  </div>
-                  <div className="message-modal-form" style={{ padding: '20px', textAlign: 'center' }}>
-                    <p>You can only share an update once every 30 minutes.</p>
-                    <div style={{ 
-                      fontSize: '24px', 
-                      fontWeight: 'bold', 
-                      margin: '20px 0',
-                      color: isDarkMode ? 'var(--dark-text)' : 'var(--text-color)'
-                    }}>
-                      {formatTimeRemaining(timeRemaining)}
-                    </div>
-                    <p>Time remaining before you can share another update.</p>
-                  </div>
-                  <div className="message-modal-footer">
-                    <button 
-                      type="button" 
-                      className="cancel-button"
-                      onClick={closeCountdownModal}
-                      style={{ margin: '0 auto' }}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        } />
-      </Routes>
-    </div>
-  );
-};
-
-// Add PropTypes validation for AppContent
-AppContent.propTypes = {
-  user: PropTypes.object,
-  onlineUsers: PropTypes.object,
-  messages: PropTypes.array,
-  handleSocketMessage: PropTypes.func.isRequired,
-  isConnected: PropTypes.bool,
-  connectionError: PropTypes.string,
-  handleLogout: PropTypes.func.isRequired,
-  userLocation: PropTypes.object,
-  isDarkMode: PropTypes.bool.isRequired,
-  toggleDarkMode: PropTypes.func.isRequired,
-  notifications: PropTypes.array,
-  onClearNotifications: PropTypes.func,
-  isLoading: PropTypes.bool
-};
-
-// Extract nested function to reduce nesting depth
-const createFallbackLocation = (messagesArray) => {
-  console.log('Creating fallback location from messages array');
-  
-  // Try to find a location from existing messages
-  const messagesWithLocation = messagesArray.filter(msg => 
-    msg.location && msg.location.latitude && msg.location.longitude
-  );
-  
-  if (messagesWithLocation.length > 0) {
-    console.log('Found location in existing messages');
-    // Use the most recent message with location
-    const recentMessage = messagesWithLocation[messagesWithLocation.length - 1];
-    
-    return {
-      latitude: recentMessage.location.latitude,
-      longitude: recentMessage.location.longitude,
-      fuzzyLocation: true // Use fuzzyLocation property for MongoDB compatibility
-    };
-  }
-  
-  // If no message locations found, use default location (NYC)
-  console.log('No message locations found, using default location');
-  return {
-    latitude: 40.7128,
-    longitude: -74.0060,
-    fuzzyLocation: true,
-    error: false
-  };
-};
-
-// Create a slightly varied location (within ~500m)
-const createVariedLocation = (baseLocation) => {
-  if (!baseLocation) return null;
-  
-  // Add a small random offset (within 100-200m) to prevent stacking markers
-  const latVariation = (Math.random() - 0.5) * 0.003;
-  const lngVariation = (Math.random() - 0.5) * 0.003;
-  
-  return {
-    latitude: baseLocation.latitude + latVariation,
-    longitude: baseLocation.longitude + lngVariation,
-    fuzzyLocation: true // Use fuzzyLocation property instead of isFallback
-  };
-};
-
-// Create fuzzy location based on privacy settings
-const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
-  if (!baseLocation) return null;
-  
-  // If fuzzy location is not requested, return the exact location
-  if (!useFuzzyLocation) {
-    return {
-      latitude: baseLocation.latitude,
-      longitude: baseLocation.longitude,
-      fuzzyLocation: false
-    };
-  }
-  
-  // For privacy, add a random offset (between 100m-500m)
-  // More random offset than standard varied location
-  const latVariation = (Math.random() - 0.5) * 0.01; // Roughly 0.5-1km variation
-  const lngVariation = (Math.random() - 0.5) * 0.01;
-  
-  return {
-    latitude: baseLocation.latitude + latVariation,
-    longitude: baseLocation.longitude + lngVariation,
-    fuzzyLocation: true // Mark as fuzzy location to match MongoDB schema
-  };
-};
-
-// Function to properly handle geolocation success
-const handleGeolocationSuccess = (position, setLocationFunction) => {
-  try {
-    // Extract coordinates from the Geolocation API response
-    const { latitude, longitude } = position.coords;
-    
-    // Check for valid coordinates
-    if (!isNaN(latitude) && !isNaN(longitude)) {
-      const locationData = {
-        latitude,
-        longitude,
-        fuzzyLocation: false, // This is a real location, not a fuzzy one
-        error: false,
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp
-      };
-      
-      console.log("Successfully got geolocation:", locationData);
-      setLocationFunction(locationData);
-    } else {
-      console.error("Invalid coordinates in geolocation result:", position);
-      setLocationFunction(prevLocation => handleLocationFallback(prevLocation));
-    }
-  } catch (error) {
-    console.error("Error processing geolocation result:", error);
-    setLocationFunction(prevLocation => handleLocationFallback(prevLocation));
-  }
-};
-
-// Extract function for handling location fallback to reduce nesting
-const handleLocationFallback = (prevLocation) => {
-  console.log('Handling location fallback');
-  // If we previously had a valid location, return that
-  if (prevLocation && !prevLocation.error) {
-    console.log('Using previous valid location');
-    return prevLocation;
-  }
-  
-  // Otherwise return a default location (NYC)
-  console.log('No previous valid location, using default');
-  return {
-    latitude: 40.7128,
-    longitude: -74.0060,
-    fuzzyLocation: true,
-    error: false
-  };
-};
-
-// Extract function to filter old messages to reduce nesting
-const filterOldMessages = (messages, timeThreshold) => {
-  const newMessages = messages.filter(msg => {
-    const msgDate = new Date(msg.timestamp);
-    return msgDate >= timeThreshold;
-  });
-  
-  // Log if any messages were removed
-  const removedCount = messages.length - newMessages.length;
-  if (removedCount > 0) {
-    
-  }
-  
-  return newMessages;
-};
-
-// Helper function to create a notification from socket data
-const createNotification = (data) => {
-  // Skip system messages
-  if (data.sender === 'System' || data.sender === 'Server') {
-    
-    return null; // Return null to indicate no notification was created
-  }
-  
-  return {
-    id: Date.now(),
-    sender: data.sender,
-    preview: data.messagePreview,
-    timestamp: data.timestamp,
-    read: false
-  };
-};
-
-// Function to check if the device is iOS (iPhone, iPad, iPod)
-const isIOS = () => {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-};
 
 function App() {
   const [user, setUser] = useState(null)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [messages, setMessages] = useState([])
   const [onlineUsers, setOnlineUsers] = useState({})
@@ -518,135 +27,150 @@ function App() {
   const [connectionError, setConnectionError] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [isDarkMode, setIsDarkMode] = useState(false)
-  const [notificationCount, setNotificationCount] = useState(0)
-  const [notificationSound] = useState(new Audio('/notification.mp3'))
-
-  // Add state for notification management
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState([])
   
-  // Get messagesTimestamp from context
-  const { messagesTimestamp, setMessagesTimestamp } = useContext(AppContext);
+  // Define state for messages timestamp (used for refreshing)
+  const [, setMessagesTimestamp] = useState(Date.now())
+
+  // Add context
+  const { isOffline } = useContext(AppContext);
   
   // Function to navigate to profiles when receiving notifications
   const navigateToProfile = (username) => {
     window.location.href = `/profile/${username}`;
   };
 
-  // Initialize on component mount
+  // Check for authentication on initial load
   useEffect(() => {
-    // Check if user is already logged in from localStorage
+    // Check if user is logged in
     const checkAuth = async () => {
+      console.log('🔍 checkAuth: Starting authentication check');
+      setIsLoading(true);
       try {
+        // Check if user is logged in using token from localStorage
+        console.log('🔍 checkAuth: Calling authService.checkLoginStatus()');
         const userData = await authService.checkLoginStatus();
-        if (userData) {
-          setUser(userData);
-          // Set dark mode from user preferences if available
-          if (userData.darkMode !== undefined) {
-            setIsDarkMode(userData.darkMode);
-            localStorage.setItem('darkMode', userData.darkMode.toString());
-          }
-        }
-      } catch (error) {  // Using underscore indicates it's intentionally unused
         
+        console.log('🔍 checkAuth: Auth status result:', userData ? 'User is logged in' : 'No user data');
+        
+        if (userData) {
+          // User is authenticated - no redirect from initial load
+          console.log('🔍 checkAuth: About to call handleAuthSuccess with shouldRedirect=false');
+          handleAuthSuccess(userData, false);
+          console.log('🔍 checkAuth: After handleAuthSuccess call');
+        } else {
+          // User is not authenticated
+          console.log('🔍 checkAuth: Setting user to null - not authenticated');
+          setUser(null);
+        }
+      } catch (error) {
+        // Error handling - just reset user state
+        console.error('🔍 checkAuth: Error during authentication check:', error);
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
-
-    // Check if dark mode preference was saved
-    const savedDarkMode = localStorage.getItem('darkMode');
-    if (savedDarkMode) {
-      setIsDarkMode(savedDarkMode === 'true');
-    }
-
+    
+    console.log('🔍 App: Running initial authentication check');
     checkAuth();
     
-    // Function to get user's location
+    // Check for dark mode preference in localStorage
+    const storedDarkMode = localStorage.getItem('darkMode');
+    if (storedDarkMode !== null) {
+      setIsDarkMode(storedDarkMode === 'true');
+    } else {
+      // If no preference is stored, check for system preference
+      const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDarkMode(prefersDarkMode);
+    }
+  }, []);
+  
+  // Get user location and set up auto-update
+  useEffect(() => {
+    // Define the function to get user location
     const getUserLocation = () => {
-      console.log("Attempting to get user location");
+      console.log("Getting user location...");
       
-      if (navigator.geolocation) {
-        console.log("Geolocation is supported");
-        
-        const geoOptions = {
-          enableHighAccuracy: true,
-          timeout: isIOS() ? 30000 : 20000, // Increased timeout for both platforms
-          maximumAge: 30000 // Allow cached positions up to 30 seconds old
-        };
-
-        const fallbackGeoOptions = {
-          enableHighAccuracy: false,
-          timeout: 10000,
-          maximumAge: 60000 // Allow cached positions up to 1 minute old
-        };
-        
-        console.log("Device is iOS:", isIOS());
-        console.log("Using geolocation options:", geoOptions);
-
-        if (isIOS()) {
-          // iOS-specific implementation
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              console.log("getCurrentPosition succeeded");
-              handleGeolocationSuccess(position, setUserLocation);
-            },
-            (error) => {
-              console.log("High accuracy position failed, trying low accuracy...");
-              // Try again with lower accuracy if high accuracy fails
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  console.log("Low accuracy position succeeded");
-                  handleGeolocationSuccess(position, setUserLocation);
-                },
-                (error) => {
-                  console.error("getCurrentPosition error:", error);
-                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
-                },
-                fallbackGeoOptions
-              );
-            },
-            geoOptions
-          );
-        } else {
-          // Non-iOS devices - use same two-step approach
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              console.log("getCurrentPosition succeeded");
-              handleGeolocationSuccess(position, setUserLocation);
-            },
-            (error) => {
-              console.log("High accuracy position failed, trying low accuracy...");
-              // Try again with lower accuracy if high accuracy fails
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  console.log("Low accuracy position succeeded");
-                  handleGeolocationSuccess(position, setUserLocation);
-                },
-                (error) => {
-                  console.error("getCurrentPosition error:", error);
-                  setUserLocation(prevLocation => handleLocationFallback(prevLocation));
-                },
-                fallbackGeoOptions
-              );
-            },
-            geoOptions
-          );
-        }
-      } else {
-        console.warn("Geolocation is NOT supported by this browser");
-        // Browser doesn't support geolocation, use fallback
-        setUserLocation(prevLocation => handleLocationFallback(prevLocation));
+      // Check if geolocation is available
+      if (!navigator.geolocation) {
+        console.log("Geolocation not supported by this browser");
+        setUserLocation(() => {
+          return {
+            latitude: 40.7128, // NYC default
+            longitude: -74.0060,
+            fuzzyLocation: true,
+            error: "Geolocation not supported"
+          };
+        });
+        return;
       }
+      
+      const geolocationOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      };
+      
+      // Try to get high accuracy position first
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log("High accuracy position succeeded");
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            fuzzyLocation: false,
+            error: null,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          };
+          console.log("Setting user location:", location);
+          setUserLocation(location);
+        },
+        () => {
+          console.log("High accuracy position failed, trying low accuracy...");
+          // Try again with lower accuracy if high accuracy fails
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log("Low accuracy position succeeded");
+              const location = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                fuzzyLocation: false,
+                error: null,
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp
+              };
+              console.log("Setting user location:", location);
+              setUserLocation(location);
+            },
+            (err) => {
+              console.log("Geolocation error:", err.message);
+              // Fallback to default location
+              setUserLocation({
+                latitude: 40.7128, // NYC default
+                longitude: -74.0060,
+                fuzzyLocation: true,
+                error: err.message
+              });
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+          );
+        },
+        geolocationOptions
+      );
     };
-
-    // Get location initially
+    
+    // Get location immediately on app load
     getUserLocation();
     
-    // Update location on different intervals based on device type
-    // iOS devices need more frequent attempts to ensure permissions are accepted
-    const intervalTime = isIOS() ? 1 * 60 * 1000 : 2 * 60 * 1000; // 1 min for iOS, 2 mins for others
-    const locationInterval = setInterval(getUserLocation, intervalTime);
+    // Set up interval to refresh location
+    const locationInterval = setInterval(() => {
+      // Only update if the user is logged in
+      if (user) {
+        getUserLocation();
+      }
+    }, 300000); // Every 5 minutes (300000 ms)
     
     // Setup visibility change listener to request location when app comes back to foreground
     const handleVisibilityChange = () => {
@@ -663,32 +187,26 @@ function App() {
       clearInterval(locationInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []); // Empty dependency array means this runs only once on mount
+  }, [user]); // Include user in the dependency array
 
   useEffect(() => {
-    
-    
     // Define socket callbacks
     const socketCallbacks = {
       onConnect: () => {
-        
         setIsConnected(true);
         setConnectionError(null);
       },
-      onConnectError: (error) => {
-        
+      onConnectError: () => {
         setIsConnected(false);
         setConnectionError('Could not connect to server. Retrying...');
       },
       onDisconnect: () => {
-        
         setIsConnected(false);
       },
-      onWelcome: (data) => {
-        
+      onWelcome: () => {
+        // Handle welcome data if needed
       },
-      onNewMessage: (data) => {
-        
+      onNewMessage: () => {
         // Don't add messages directly from broadcast anymore
         // Messages will be fetched from the database when refresh signal is received
       },
@@ -708,54 +226,58 @@ function App() {
         }
       },
       onMessageLiked: (data) => {
-        
-        // Update any displayed message with the new like count
-        if (data && data.messageId) {
-          setMessages(prevMessages => 
-            prevMessages.map(msg => 
-              msg.dbId === data.messageId ? 
-                { ...msg, likesCount: data.likesCount } : 
-                msg
-            )
-          );
-          
-          // If the current user liked this message, update their likedMessages
-          if (user && data.likedByUsername === user.username) {
-            // Force a refresh of profile cards with a new timestamp
-            setMessagesTimestamp(Date.now());
+          // Update any displayed message with the new like count
+          if (data && data.messageId) {
+            setMessages(prevMessages => 
+              prevMessages.map(msg => 
+                msg.dbId === data.messageId ? 
+                  { ...msg, likesCount: data.likesCount } : 
+                  msg
+              )
+            );
+            
+            // If the current user liked this message, update their likedMessages
+            if (user && data.likedByUsername === user.username) {
+              // Force a refresh of profile cards with a new timestamp
+              updateMessagesTimestamp();
+            }
           }
-        }
-      },
+        },
       onMessageUnliked: (data) => {
-        
-        // Update any displayed message with the new like count
-        if (data && data.messageId) {
-          setMessages(prevMessages => 
-            prevMessages.map(msg => 
-              msg.dbId === data.messageId ? 
-                { ...msg, likesCount: data.likesCount } : 
-                msg
-            )
-          );
-          
-          // If the current user unliked this message, update their likedMessages
-          if (user && data.unlikedByUsername === user.username) {
-            // Force a refresh of profile cards with a new timestamp
-            setMessagesTimestamp(Date.now());
+          // Update any displayed message with the new like count
+          if (data && data.messageId) {
+            setMessages(prevMessages => 
+              prevMessages.map(msg => 
+                msg.dbId === data.messageId ? 
+                  { ...msg, likesCount: data.likesCount } : 
+                  msg
+              )
+            );
+            
+            // If the current user unliked this message, update their likedMessages
+            if (user && data.unlikedByUsername === user.username) {
+              // Force a refresh of profile cards with a new timestamp
+              updateMessagesTimestamp();
+            }
           }
-        }
-      },
+        },
       onMessageDeleted: (data) => {
-        console.log('⚡ Socket: Message deleted', data);
-        
-        // Remove the deleted message from the messages list
-        if (data && data.messageId) {
-          setMessages(prevMessages => 
-            prevMessages.filter(msg => msg.dbId !== data.messageId)
-          );
+          console.log('⚡ Socket: Message deleted', data);
           
-          // Force a refresh of profile cards since a message was deleted
-          setMessagesTimestamp(Date.now());
+          // Remove the deleted message from the messages list
+          if (data && data.messageId) {
+            setMessages(prevMessages => 
+              prevMessages.filter(msg => msg.dbId !== data.messageId)
+            );
+            
+            // Force a refresh of profile cards since a message was deleted
+            updateMessagesTimestamp();
+          }
+        },
+      onNotificationClick: (data) => {
+        // Handle notification click by navigating to the relevant page
+        if (data.sender) {
+          navigateToProfile(data.sender);
         }
       }
     };
@@ -805,8 +327,8 @@ function App() {
                 // by the next effect run, thanks to the sessionStorage flag
               }
             })
-            .catch(error => {
-              
+            .catch(err => {
+              console.error('Error requesting notification permission:', err);
             });
         }
       }
@@ -877,9 +399,6 @@ function App() {
       }
     } else {
       // Handle regular text-only messages
-      // Create a temporary local ID for this message (until we get DB confirmation)
-      const tempLocalId = `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
       // Add our message locally with a temporary ID
       // This gives immediate feedback to the user but will be replaced by DB version on refresh
       addMessage(user.username, message, false, currentTimestamp, messageLocation);
@@ -900,286 +419,207 @@ function App() {
     
     if (isSystemMessage) {
       console.log(`System message: ${content}`);
-      return; // Don't add system messages to the messages list
-    }
-    
-    // Only filter non-system messages for the 30-minute window
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    if (new Date(timestamp) < thirtyMinutesAgo) {
-      console.log('Message is older than 30 minutes, not adding to state');
-      return; // Don't add old messages
-    }
-    
-    setMessages(prev => [...prev, { 
-      sender, 
-      content, 
-      isReceived, 
-      timestamp, 
-      location,
-      messageId,
-      image
-    }]);
-  };
-  
-  // Function to fetch messages without resetting the view
-  const fetchMessagesWithoutReset = async () => {
-    if (!user) return;
-    
-    console.log('⚡ Fetching messages from database - preserving map state');
-    
-    // First check if the auth token is valid
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('Authentication token missing, cannot fetch messages');
       return;
     }
     
-    // Set loading state
-    setIsLoading(true);
+    setMessages(prevMessages => {
+      // Create new message object
+      const newMessage = {
+        sender: sender,
+        content: content,
+        timestamp: timestamp,
+        isReceived: isReceived,
+        location: location || null,
+        dbId: messageId || null,
+        image: image || null,
+      };
+      
+      // Add to messages array, maintaining sort order by timestamp
+      const updatedMessages = [...prevMessages, newMessage].sort((a, b) => 
+        new Date(b.timestamp) - new Date(a.timestamp)
+      );
+      
+      // Optionally filter out old messages to prevent the array from growing too large
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+      
+      return filterOldMessages(updatedMessages, oneDayAgo);
+    });
+  };
+
+  // Helper to update messages timestamp 
+  const updateMessagesTimestamp = () => {
+    setMessagesTimestamp(Date.now());
+  };
+
+  // Fetch messages function that doesn't reset view
+  const fetchMessagesWithoutReset = async () => {
+    // Skip if offline
+    if (isOffline) {
+      console.log('Offline, skipping message fetch');
+      return;
+    }
     
     try {
-      // Fetch all messages using auto-pagination
-      const response = await apiService.getAllMessagesWithAutoPagination(null, user.username, 30);
-      setIsLoading(false);
+      setIsLoading(true);
       
-      if (!response.success) {
-        console.error('Error fetching messages:', response.message || 'Unknown error');
-        return;
+      const response = await apiService.getMessages();
+      if (response.success) {
+        // Replace messages with new data
+        setMessages(response.messages || []);
+        
+        // Update online users
+        if (response.onlineUsers) {
+          setOnlineUsers(response.onlineUsers);
+        }
+        
+        // Update messages timestamp
+        updateMessagesTimestamp();
       }
-      
-      if (!response.messages || !Array.isArray(response.messages)) {
-        console.error('Invalid response format when fetching messages:', response);
-        return;
-      }
-      
-      console.log(`Fetched ${response.messages.length} messages within the last 30 minutes`);
-      
-      // Convert DB messages to app message format
-      const formattedMessages = response.messages.map(msg => ({
-        sender: msg.senderUsername,
-        content: msg.text,
-        isReceived: true,
-        timestamp: new Date(msg.createdAt),
-        location: msg.location,
-        dbId: msg._id,
-        likesCount: msg.likes ? msg.likes.length : 0,
-        likedByCurrentUser: msg.likedByCurrentUser || false,
-        image: msg.image
-      }));
-      
-      // Update messages while preserving state
-      setMessages(prevMessages => {
-        // Create a map of existing messages by ID for quick lookup
-        const existingMessagesMap = new Map();
-        prevMessages
-          .filter(msg => msg.dbId)
-          .forEach(msg => existingMessagesMap.set(msg.dbId, msg));
-        
-        // Create a map of new messages by ID
-        const newMessagesMap = new Map();
-        formattedMessages.forEach(msg => {
-          if (msg.dbId) {
-            newMessagesMap.set(msg.dbId, msg);
-          }
-        });
-        
-        // Create a combined result that:
-        // 1. Keeps existing messages that don't have IDs (local messages)
-        // 2. Updates any existing messages with fresh data from the server
-        // 3. Adds new messages that didn't exist before
-        
-        // Start with messages that don't have IDs (local messages)
-        const result = prevMessages.filter(msg => !msg.dbId);
-        
-        // Add all messages from the new fetch (they'll replace any with the same ID)
-        formattedMessages.forEach(msg => {
-          result.push(msg);
-        });
-        
-        console.log(`Updated messages: ${result.length} total (${formattedMessages.length} from server, ${result.length - formattedMessages.length} local)`);
-        return result;
-      });
-      
     } catch (error) {
       console.error('Error fetching messages:', error);
+    } finally {
       setIsLoading(false);
-      
-      // If token is invalid, try to refresh it
-      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-        const success = await authService.refreshToken();
-        if (success) {
-          // Token refreshed, retry fetch
-          fetchMessagesWithoutReset();
-        } else {
-          // Token refresh failed, redirect to login
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
-        }
-      }
-    }
-  };
-  
-  // Fetch messages from the database when messagesTimestamp changes
-  useEffect(() => {
-    if (user) {
-      console.log('⚡ Fetching messages from database due to messagesTimestamp update');
-      fetchMessagesWithoutReset();
-    }
-  }, [user, messagesTimestamp]); // Keep messagesTimestamp as dependency for initial load
-
-  // Update messages with liked status when user changes
-  useEffect(() => {
-    // Only run if we have a user and messages
-    if (user && messages.length > 0) {
-      // Get the user's liked messages
-      apiService.getUserByUsername(user.username)
-        .then(response => {
-          if (response.success && response.user && response.user.likedMessages) {
-            const likedMessageIds = new Set(response.user.likedMessages);
-            
-            // Update messages with liked status
-            setMessages(prevMessages => 
-              prevMessages.map(message => ({
-                ...message,
-                likedByCurrentUser: message.dbId && likedMessageIds.has(message.dbId)
-              }))
-            );
-          } else {
-            console.error('Invalid response format when fetching user profile:', response);
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching user profile:', error);
-        });
-    }
-  }, [user]);
-
-  // Handle sending a message 
-  const handleAuthSuccess = (userData) => {
-    setUser(userData);
-    // Set dark mode from user preferences if available
-    if (userData.darkMode !== undefined) {
-      setIsDarkMode(userData.darkMode);
-      localStorage.setItem('darkMode', userData.darkMode.toString());
     }
   };
 
+  // Handle successful authentication
+  const handleAuthSuccess = (userData, shouldRedirect = false) => {
+    console.log('🔐 handleAuthSuccess: Called with userData:', userData, 'shouldRedirect:', shouldRedirect);
+    setUser(userData.user || userData); // Handle both cases: userData or userData.user
+    
+    // Set dark mode preference from user data if available
+    const userObject = userData.user || userData;
+    console.log('🔐 handleAuthSuccess: Setting user state with:', userObject);
+    
+    if (userObject && userObject.darkMode !== undefined) {
+      setIsDarkMode(userObject.darkMode);
+    }
+    
+    // Force navigation to the home page after successful login, only if called from login form
+    if (shouldRedirect) {
+      console.log('🔐 handleAuthSuccess: shouldRedirect is true, navigating to homepage');
+      window.location.href = '/';
+    } else {
+      console.log('🔐 handleAuthSuccess: shouldRedirect is false, not redirecting');
+    }
+  };
+
+  // Handle user logout
   const handleLogout = () => {
+    // Disconnect from socket
+    socketService.disconnect();
+    
+    // Call the authService logout method to clean up all auth-related storage
     authService.logout();
+    
+    // Reset application state
     setUser(null);
     setMessages([]);
-    socketService.disconnect();
-    setIsConnected(false);
+    setOnlineUsers({});
+    
+    // Save current dark mode preference to localStorage
+    localStorage.setItem('darkMode', isDarkMode);
+    
+    // Redirect to auth page
+    window.location.href = '/auth';
   };
 
-  // Add an effect to periodically check for and remove old messages
-  useEffect(() => {
-    // Only run this if there are messages and user is authenticated
-    if (messages.length > 0 && user) {
-      // Set up interval to check every minute
-      const interval = setInterval(() => {
-        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-        
-        // Filter out messages older than 30 minutes
-        setMessages(prev => filterOldMessages(prev, thirtyMinutesAgo));
-      }, 60000); // Check every minute
-      
-      // Clean up interval on unmount
-      return () => clearInterval(interval);
-    }
-  }, [messages.length, user]);
-
-  // Function to toggle dark mode
+  // Toggle dark mode
   const toggleDarkMode = () => {
     const newDarkMode = !isDarkMode;
     setIsDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', newDarkMode.toString());
     
-    // If user is logged in, sync dark mode preference with server
+    // Save to localStorage
+    localStorage.setItem('darkMode', newDarkMode);
+    
+    // Update user preference in the database if logged in
     if (user) {
       updateUserDarkModePreference(newDarkMode);
     }
   };
-  
-  // Function to update user's dark mode preference on the server
+
+  // Update user dark mode preference in the database
   const updateUserDarkModePreference = async (darkMode) => {
     try {
       const response = await authService.updateProfile({ darkMode });
       if (!response.success) {
-        
+        console.error('Failed to update dark mode preference');
       }
     } catch (error) {
-      
+      console.error('Error updating dark mode preference:', error);
     }
   };
-  
-  // Load dark mode preference from localStorage on initial render
-  useEffect(() => {
-    const savedDarkMode = localStorage.getItem('darkMode');
-    if (savedDarkMode !== null) {
-      setIsDarkMode(savedDarkMode === 'true');
-    }
-  }, []);
 
-  // Apply dark mode class to body element when isDarkMode changes
+  // When dark mode changes, apply it to the document
   useEffect(() => {
+    // Add or remove dark-mode class from both root elements
     if (isDarkMode) {
+      document.documentElement.classList.add('dark-mode');
       document.body.classList.add('dark-mode');
     } else {
+      document.documentElement.classList.remove('dark-mode');
       document.body.classList.remove('dark-mode');
     }
+
+    // Additionally, store the preference in local storage for persistence
+    localStorage.setItem('darkMode', isDarkMode);
   }, [isDarkMode]);
 
-  // Clear all notifications
+  // Handle clearing all notifications
   const handleClearNotifications = () => {
     setNotifications([]);
   };
 
-  // Render loading state when loading
-  if (isLoading) {
-    return <div className={`loading ${isDarkMode ? 'dark-mode' : ''}`}>Loading...</div>
+  // If offline, show the offline fallback
+  if (isOffline) {
+    return <OfflineFallback messages={messages} isDarkMode={isDarkMode} />;
   }
 
-  // For both authenticated and non-authenticated users, use Router
-  return (
-    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
-        <OfflineFallback />
-        <PWAInstallPrompt />
-        
-        {user ? (
-          // Authenticated user content
-          <AppContent
-            user={user}
-            onlineUsers={onlineUsers}
-            messages={messages}
-            handleSocketMessage={handleShareUpdate}
-            isConnected={isConnected}
-            connectionError={connectionError}
-            handleLogout={handleLogout}
-            userLocation={userLocation}
-            isDarkMode={isDarkMode}
-            toggleDarkMode={toggleDarkMode}
-            notifications={notifications}
-            onClearNotifications={handleClearNotifications}
-            isLoading={isLoading}
-          />
-        ) : (
-          // Non-authenticated user - routing for landing and auth pages
+  // If not logged in and not loading, show the auth screen
+  if (!user && !isLoading) {
+    console.log('🔎 Rendering Auth/Landing screen because user is null and not loading');
+    return (
+      <Router>
+        <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
+          {/* Show PWA install prompt */}
+          <PWAInstallPrompt isDarkMode={isDarkMode} />
+          
+          {/* Show landing page or auth component based on route */}
           <Routes>
-            <Route path="/auth" element={
-              <Auth onAuthSuccess={handleAuthSuccess} isDarkMode={isDarkMode} />
-            } />
-            <Route path="/" element={
-              <LandingPage isDarkMode={isDarkMode} />
-            } />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/" element={<LandingPage isDarkMode={isDarkMode} />} />
+            <Route path="/auth/*" element={<Auth onAuthSuccess={(userData) => {
+              console.log('🔐 Auth component calling handleAuthSuccess with shouldRedirect=true');
+              handleAuthSuccess(userData, true);
+            }} isDarkMode={isDarkMode} />} />
+            <Route path="*" element={<Navigate to="/auth" />} />
           </Routes>
-        )}
-      </div>
+        </div>
+      </Router>
+    );
+  }
+
+  // Main app content
+  console.log('🔎 Rendering main AppContent because user exists:', user?.username);
+  return (
+    <Router>
+      <AppContent
+        user={user}
+        onlineUsers={onlineUsers}
+        messages={messages}
+        handleSocketMessage={handleShareUpdate}
+        isConnected={isConnected}
+        connectionError={connectionError}
+        handleLogout={handleLogout}
+        userLocation={userLocation}
+        isDarkMode={isDarkMode}
+        toggleDarkMode={toggleDarkMode}
+        notifications={notifications}
+        onClearNotifications={handleClearNotifications}
+        isLoading={isLoading}
+      />
     </Router>
-  )
+  );
 }
 
-export default App
+export default App;

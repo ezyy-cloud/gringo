@@ -162,53 +162,35 @@ const authService = {
     }
   },
   
-  // Check if user is logged in using token from localStorage
+  // Check if user is logged in
   checkLoginStatus: async () => {
+    console.log('AuthService: checkLoginStatus called');
+    
+    // First, check if we have a token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('AuthService: No token found in localStorage');
+      return null;
+    }
+    
     try {
-      // First check if token exists and is not expired
-      if (!authService.isAuthenticated()) {
-        console.log('User not authenticated: Missing or expired token');
-        return null;
-      }
-      
-      // Try to validate the token by making a request to the server
+      console.log('AuthService: Token found, validating with server');
+      // Make API call to validate token
       const response = await api.get('/me');
       
-      if (response.data.success) {
-        // Ensure user object has likedMessages property
-        if (!response.data.data.user.likedMessages) {
-          response.data.data.user.likedMessages = [];
-          console.log('Adding empty likedMessages array to user object');
-        }
-        
-        // Update user data in local storage in case it changed
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        
-        // Refresh token expiration time
-        const expirationTime = Date.now() + (30 * 24 * 60 * 60 * 1000);
-        localStorage.setItem('tokenExpiration', expirationTime.toString());
-        
+      if (response.data.success && response.data.data.user) {
+        console.log('AuthService: Token is valid, user authenticated:', response.data.data.user.username);
         return response.data.data.user;
+      } else {
+        console.log('AuthService: Token validation failed:', response);
+        // Clear invalid token
+        localStorage.removeItem('token');
+        return null;
       }
-      
-      return null;
     } catch (error) {
-      console.error('Error checking login status:', error);
-      
-      // Try to refresh the token if the error is related to token expiration
-      if (error.response && error.response.status === 401) {
-        console.log('Token expired, attempting to refresh');
-        const refreshed = await authService.refreshToken();
-        if (refreshed) {
-          // If refresh successful, try to get user status again
-          return authService.checkLoginStatus();
-        }
-      }
-      
-      // If there's an error (like token expired), clear the storage
+      console.error('AuthService: Error checking login status:', error);
+      // If there's an error (like 401 Unauthorized), clear the token
       localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('tokenExpiration');
       return null;
     }
   },

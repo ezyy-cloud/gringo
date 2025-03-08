@@ -563,7 +563,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
               latitude: userLocation.latitude,
               zoom: 14, // Closer zoom for user's location
               pitch: is3DMode ? 45 : 0, // Maintain pitch if in 3D mode
-              bearing: viewState.bearing
+              bearing: 0 // Set to 0 to prevent the "null" bearing error
             });
           }}
           title="Center map on my location"

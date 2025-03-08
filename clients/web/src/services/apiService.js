@@ -12,6 +12,55 @@ const api = axios.create({
   }
 });
 
+// Helper method to get the auth token from localStorage
+const getAuthToken = () => {
+  console.log('ApiService: Getting auth token');
+  const token = localStorage.getItem('token');
+  console.log('ApiService: Token exists:', !!token);
+  return token;
+};
+
+// Add request/response interceptors to add authentication headers and handle errors
+api.interceptors.request.use(
+  (config) => {
+    console.log('ApiService: Intercepting request to:', config.url);
+    const token = getAuthToken();
+    if (token) {
+      console.log('ApiService: Adding auth token to request');
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    console.error('ApiService: Request interceptor error:', error);
+    return Promise.reject(error);
+  }
+);
+
+api.interceptors.response.use(
+  (response) => {
+    console.log('ApiService: Response received success');
+    return response;
+  },
+  (error) => {
+    console.error('ApiService: Response error:', error.response?.status, error.response?.data);
+    
+    // If status is 401 Unauthorized, clear token and redirect to login
+    if (error.response && error.response.status === 401) {
+      console.log('ApiService: 401 Unauthorized response, clearing token');
+      localStorage.removeItem('token');
+      
+      // Check if we are not already on the login page
+      if (!window.location.pathname.includes('/auth')) {
+        console.log('ApiService: Redirecting to login page');
+        window.location.href = '/auth';
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 // API service methods
 const apiService = {
   // Get server status
