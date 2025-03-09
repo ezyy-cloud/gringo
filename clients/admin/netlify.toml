@@ -12,6 +12,12 @@
   force = true
 
 [[redirects]]
+  from = "/auth/*"
+  to = "https://api.gringo.ezyy.cloud/auth/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200 
