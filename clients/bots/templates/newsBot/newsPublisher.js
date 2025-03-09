@@ -166,17 +166,53 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
         
         logger.info('Using bot.authToken for authentication');
         
-        // Create form data for multipart request
-        const formData = prepareImageFormData(newsItem.formattedContent || newsItem, tempFilePath, newsItem.location, bot);
-        
         // Make the API request
-        const apiUrl = `${MAIN_SERVER_URL}/api/messages`;
+        const apiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
         logger.info(`Sending post request to: ${apiUrl}`);
         logger.info(`Request headers: Auth=${authToken ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
         
-        const response = await axios.post(apiUrl, formData, {
+        // Extract message content from newsItem 
+        const messageText = typeof newsItem.formattedContent === 'string' 
+          ? newsItem.formattedContent 
+          : (newsItem.formattedContent?.content || newsItem.title || 'News update');
+        
+        // Create a direct multipart form data request
+        const directForm = new FormData();
+        
+        // Add the critical message field
+        directForm.append('message', messageText);
+        
+        // Add socketId field which is required
+        const socketId = `newsbot_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        directForm.append('socketId', socketId);
+        
+        // Add username
+        const username = (bot && bot.username) ? bot.username : 'NewsBot';
+        directForm.append('username', username);
+        
+        // Add location if available
+        if (newsItem.location) {
+          directForm.append('location', JSON.stringify({
+            latitude: newsItem.location.latitude,
+            longitude: newsItem.location.longitude,
+            fuzzyLocation: true
+          }));
+        }
+        
+        // Add the image file
+        directForm.append('image', fs.createReadStream(tempFilePath), {
+          filename: path.basename(tempFilePath),
+          contentType: getFileTypeFromPath(tempFilePath)
+        });
+        
+        // Log what we're about to send
+        logger.info(`Sending message: "${messageText.substring(0, 50)}..."`);
+        logger.info(`With username: ${username}`);
+        logger.info(`With image file: ${tempFilePath}`);
+        
+        const response = await axios.post(apiUrl, directForm, {
           headers: {
-            ...formData.getHeaders(),
+            ...directForm.getHeaders(),
             'Authorization': `Bearer ${authToken}`,
             'X-API-Key': apiKey
           }
@@ -241,9 +277,47 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
                 
                 // Make the retry request
                 logger.info('Sending retry request with new token');
-                const retryResponse = await axios.post(apiUrl, retryFormData, {
+                
+                // Extract message content from newsItem for retry
+                const retryMessageText = typeof newsItem.formattedContent === 'string' 
+                  ? newsItem.formattedContent 
+                  : (newsItem.formattedContent?.content || newsItem.title || 'News update');
+                
+                // Create a direct multipart form data request for retry
+                const retryDirectForm = new FormData();
+                
+                // Add the critical message field
+                retryDirectForm.append('message', retryMessageText);
+                
+                // Add username
+                const retryUsername = (bot && bot.username) ? bot.username : 'NewsBot';
+                retryDirectForm.append('username', retryUsername);
+                
+                // Add location if available
+                if (newsItem.location) {
+                  retryDirectForm.append('location', JSON.stringify({
+                    latitude: newsItem.location.latitude,
+                    longitude: newsItem.location.longitude,
+                    fuzzyLocation: true
+                  }));
+                }
+                
+                // Add the image file
+                retryDirectForm.append('image', fs.createReadStream(tempFilePath));
+                
+                // Log what we're about to send in retry
+                logger.info(`Retrying with message: "${retryMessageText.substring(0, 50)}..."`);
+                
+                // Add socketId field which is required for retry
+                const retrySocketId = `newsbot_retry_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+                retryDirectForm.append('socketId', retrySocketId);
+                
+                // Update the API URL for retry to use the with-image endpoint
+                const retryApiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
+                
+                const retryResponse = await axios.post(retryApiUrl, retryDirectForm, {
                   headers: {
-                    ...retryFormData.getHeaders(),
+                    ...retryDirectForm.getHeaders(),
                     'Authorization': `Bearer ${bot.authToken}`,
                     'X-API-Key': bot.apiKey || process.env.BOT_API_KEY || 'dev-bot-api-key'
                   }
@@ -372,19 +446,37 @@ function getFileTypeFromPath(filePath) {
 }
 
 /**
- * Prepare form data for image upload
- * @param {string} content - The message content
- * @param {string} imagePath - Path to the image file
- * @param {Object} location - Optional location data
- * @param {Object} bot - Optional bot instance
+ * Prepare form data for image submission
+ * @param {string|Object} content - Message content or news item object
+ * @param {string} imagePath - Path to the local image file
+ * @param {Object|null} location - Location data
+ * @param {Object|null} bot - Bot instance
  * @returns {FormData} - Prepared form data
  */
 function prepareImageFormData(content, imagePath, location = null, bot = null) {
   try {
     const formData = new FormData();
     
-    // Add the message content
-    formData.append('content', content.content || content);
+    // Debug what content we have
+    logger.info('prepareImageFormData content type: ' + typeof content);
+    logger.info('prepareImageFormData content: ' + JSON.stringify(content, null, 2).substring(0, 200) + '...');
+    
+    // Extract the actual message text
+    let messageText = '';
+    if (typeof content === 'string') {
+      messageText = content;
+    } else if (content.content) {
+      messageText = content.content;
+    } else if (content.text) {
+      messageText = content.text;
+    } else if (content.title) {
+      messageText = content.title;
+    }
+    
+    logger.info('Message text to be sent: ' + messageText);
+    
+    // Add the message content - THIS IS THE CRITICAL FIELD REQUIRED BY THE API
+    formData.append('message', messageText);
     
     // Add title and source if available
     if (content.title) {
@@ -406,7 +498,6 @@ function prepareImageFormData(content, imagePath, location = null, bot = null) {
     const username = (bot && bot.username) ? bot.username : 'NewsBot';
     
     // Add required message metadata
-    formData.append('message', content.content || content); // For backward compatibility
     formData.append('username', username);
     formData.append('senderUsername', username);
     formData.append('messageId', messageId);

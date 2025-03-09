@@ -55,6 +55,21 @@ const newsFormatter = require('./newsFormatter');
 const newsPublisher = require('./newsPublisher');
 const countryUtils = require('./countryUtils');
 
+// Add rate limiting tracking variables at module scope
+let currentBackoff = 0;
+const baseBackoff = 5000; // 5 seconds base backoff
+const maxBackoff = 30 * 60 * 1000; // 30 minutes maximum backoff
+
+// Function to calculate exponential backoff with jitter
+function calculateBackoff(attempt = 1) {
+  // Exponential backoff: base * 2^attempt
+  const exponential = baseBackoff * Math.pow(2, attempt); 
+  // Add jitter to prevent thundering herd problem (±25%)
+  const jitter = exponential * (0.75 + Math.random() * 0.5);
+  // Cap at maximum backoff time
+  return Math.min(jitter, maxBackoff);
+}
+
 module.exports = {
   name: 'News Bot',
   description: 'A bot that posts breaking news updates from around the world',
@@ -268,31 +283,16 @@ module.exports = {
         return true;
       },
       
-      // Add rate limiting tracking
-      let currentBackoff = 0;
-      const baseBackoff = 5000; // 5 seconds base backoff
-      const maxBackoff = 30 * 60 * 1000; // 30 minutes maximum backoff
-
-      // Function to calculate exponential backoff with jitter
-      function calculateBackoff(attempt = 1) {
-        // Exponential backoff: base * 2^attempt
-        const exponential = baseBackoff * Math.pow(2, attempt); 
-        // Add jitter to prevent thundering herd problem (±25%)
-        const jitter = exponential * (0.75 + (Math.random() * 0.5));
-        // Cap at max backoff
-        return Math.min(jitter, maxBackoff);
-      }
-
       // Reset the backoff when successful
-      function resetBackoff() {
+      resetBackoff: function() {
         if (currentBackoff > 0) {
           logger.info(`Resetting backoff after successful operations`);
           currentBackoff = 0;
         }
-      }
+      },
 
       // Increase backoff after failures
-      function increaseBackoff() {
+      increaseBackoff: function() {
         const nextBackoff = currentBackoff === 0 ? 
           baseBackoff : // First failure, use base backoff
           calculateBackoff(Math.floor(Math.log2(currentBackoff / baseBackoff)) + 1); // Subsequent failures
@@ -300,13 +300,13 @@ module.exports = {
         logger.warn(`Increasing backoff from ${currentBackoff/1000}s to ${nextBackoff/1000}s due to rate limiting`);
         currentBackoff = nextBackoff;
         return currentBackoff;
-      }
+      },
 
       // Get current delay (includes backoff if present)
-      function getCurrentDelay() {
+      getCurrentDelay: function() {
         const baseDelay = 3000; // Default 3 second delay between posts
         return currentBackoff > 0 ? currentBackoff : baseDelay;
-      }
+      },
 
       // Main run function for the bot
       run: async () => {
@@ -375,11 +375,11 @@ module.exports = {
               if (result.success) {
                 logger.info(`Successfully posted news item: "${processedItem.title}"`);
                 // Reset backoff after successful post
-                resetBackoff();
+                bot.resetBackoff();
               } else if (result.rateLimited) {
                 logger.warn(`Rate limited when posting: "${processedItem.title}". Retry after ${result.retryAfter}s`);
                 // Increase backoff time
-                increaseBackoff();
+                bot.increaseBackoff();
                 // Set flag to prevent processing more items in this run
                 encounteredRateLimit = true;
                 // Break the loop to stop processing more items
@@ -397,7 +397,7 @@ module.exports = {
               }
               
               // Add delay between posts - use dynamically calculated delay
-              const delay = getCurrentDelay();
+              const delay = bot.getCurrentDelay();
               logger.info(`Waiting ${delay/1000} seconds before processing next item`);
               await new Promise(resolve => setTimeout(resolve, delay));
             } catch (itemError) {

@@ -56,6 +56,12 @@ function registerTemplates(botFactory) {
         // Register the template with its name
         botFactory.registerBotTemplate(templateName, template);
         
+        // Special case for newsBot - ensure it's also registered as 'news'
+        if (dirName === 'newsBot' && templateName !== 'news') {
+          console.log(`Ensuring newsBot is also registered as 'news' template`);
+          botFactory.registerBotTemplate('news', template);
+        }
+        
         logger.info(`Registered bot template: ${templateName}`);
         registeredCount++;
       } catch (error) {
