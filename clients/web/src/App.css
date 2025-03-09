@@ -472,3 +472,37 @@ body.dark-mode .floating-action-button:hover {
   padding: 4px 8px;
   margin-left: 8px;
 }
+
+/* Loading spinner for initial auth check */
+.app-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+  background-color: var(--app-bg-color);
+}
+
+.app-loading.dark-mode {
+  background-color: var(--dark-bg-color);
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+}
+
+.dark-mode .loading-spinner {
+  border: 5px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary-color);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

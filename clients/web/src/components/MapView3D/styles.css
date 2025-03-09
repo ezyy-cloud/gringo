@@ -3,7 +3,7 @@
 /* Toggle button for 3D mode - exact match to weather widget in icon-only mode */
 .toggle-3d-btn {
   position: absolute;
-  top: calc(var(--header-height, 64px) + 1px); /* Moved even closer to navbar */
+  top: calc(var(--header-height, 64px) + 1px + 20px); /* Moved 20px lower than before */
   right: 20px; /* Same margin as weather widget has on left */
   padding: 10px; /* Reduced from 15px to 10px */
   min-width: unset;
@@ -34,7 +34,7 @@
 /* Responsive adjustment for the button position on mobile */
 @media (max-width: 768px) {
   .toggle-3d-btn {
-    top: calc(56px + 1px); /* Adjusted for smaller header height on mobile */
+    top: calc(56px + 1px + 20px); /* Adjusted for smaller header height on mobile + 20px lower */
     right: 15px;
     width: 50px; /* Keep the same overall size */
     height: 50px; /* Keep the same overall size */

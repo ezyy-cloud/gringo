@@ -11,12 +11,19 @@ const saveMessageToDatabase = async (messageData, userId) => {
     // Log the incoming location data for debugging
     console.log(`Saving message to database with location data:`, location);
     
+    // Handle case where sender might be an array (from FormData with multiple username fields)
+    let senderUsername = sender;
+    if (Array.isArray(sender)) {
+      console.log(`WARNING: Sender is an array, using first value:`, sender);
+      senderUsername = sender[0]; // Take the first value
+    }
+    
     // Create a new message with all required fields
     const message = new Message({
       messageId: messageId || Date.now().toString(36) + Math.random().toString(36).substring(2),
       text,
       userId: userId,
-      senderUsername: sender, // Ensure senderUsername is set
+      senderUsername: senderUsername, // Use processed senderUsername
       timestamp: timestamp || new Date(),
       image,
       isApiMessage: true
@@ -82,10 +89,13 @@ const createMessage = async (req, res, io, broadcastMessage, notifyFollowers) =>
     return res.status(400).json({ error: 'Message is required' });
   }
   
-  console.log('API Message received:', message, 'from socket ID:', socketId, 'User:', username || 'Unknown', 'Location:', location);
+  console.log('API Message received:', message, 'from socket ID:', socketId, 'User:', username || req.user?.username || 'Unknown', 'Location:', location);
   
   // Use provided messageId or create a unique ID for this message
   let messageId = providedMessageId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
+  
+  // Get sender from request body or authenticated user
+  const sender = username || (req.user ? req.user.username : null) || 'Unknown User';
   
   // Prepare the message object
   const messageObj = { 
@@ -98,48 +108,45 @@ const createMessage = async (req, res, io, broadcastMessage, notifyFollowers) =>
     source: 'api',
     isApiMessage: true,
     senderSocketId: socketId,
-    sender: username || 'Unknown User',
-    location: location
+    sender: sender,
+    location: location,
+    eventType: 'message' // Standard event type for consistency
   };
   
   // Save to database if a username is provided
   let savedMessage = null;
   let userId = null;
   
-  if (username) {
+  if (sender && sender !== 'Unknown User') {
     try {
       // Look up the user by username to get their ID
-      const user = await User.findOne({ username });
+      const user = await User.findOne({ username: sender });
       if (user) {
         userId = user._id;
         savedMessage = await saveMessageToDatabase({
           text: message,
-          sender: username,
+          sender: sender,
           messageId: messageId,
           timestamp: new Date(),
           location
-        }, userId);
+        }, user._id);
         
         if (savedMessage) {
           messageId = savedMessage._id;
           messageObj.dbId = messageId;
           
-          // Add location to the message object for broadcasting if saved properly
-          if (savedMessage.location && savedMessage.location.latitude) {
-            messageObj.location = {
-              latitude: savedMessage.location.latitude,
-              longitude: savedMessage.location.longitude,
-              fuzzyLocation: savedMessage.location.fuzzyLocation
-            };
-            console.log(`Broadcasting text message with location: (${messageObj.location.latitude}, ${messageObj.location.longitude})`);
-          }
-          
-          // Notify followers about this new message
-          await notifyFollowers(userId, username, message, messageId);
+          // Notify followers about the new message
+          await notifyFollowers(userId, sender, message, messageId);
         }
+      } else {
+        console.warn(`User not found for username: ${sender}`);
       }
     } catch (error) {
-      console.error('Error saving API message to database:', error);
+      console.error('Error saving message to database:', error);
+      return res.status(500).json({ 
+        error: 'Error saving message',
+        details: error.message
+      });
     }
   }
   
@@ -157,7 +164,10 @@ const createMessage = async (req, res, io, broadcastMessage, notifyFollowers) =>
 // Create a message with an image
 const createMessageWithImage = async (req, res, io, broadcastMessage, notifyFollowers) => {
   try {
-    const { message, socketId, username, location: rawLocation, messageId: providedMessageId } = req.body;
+    const { message, socketId: rawSocketId, username, location: rawLocation, messageId: providedMessageId } = req.body;
+    
+    // Ensure we have a socketId (fallback if undefined)
+    const socketId = rawSocketId || `system_${username || 'unknown'}_${Date.now()}`;
     
     // Process location data - it might be a string from FormData
     let location = rawLocation;
@@ -197,117 +207,162 @@ const createMessageWithImage = async (req, res, io, broadcastMessage, notifyFoll
     // Upload the image to Cloudinary
     let result;
     try {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'gringo_messages',
-          resource_type: 'image',
-          format: 'jpg',
-          transformation: [
-            { width: 800, height: 800, crop: 'limit' },
-            { quality: 'auto:good' }
-          ]
-        },
-        async (error, uploadResult) => {
-          if (error) {
-            console.error('Cloudinary upload error:', error);
-            console.error('Cloudinary detailed error info:', JSON.stringify(error, null, 2));
-            return res.status(500).json({ error: 'Image upload failed', details: error });
-          }
-          
-          // Use provided messageId or create a unique ID for this message
-          let messageId = providedMessageId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
-          
-          // Prepare the message object
-          const messageObj = { 
-            id: messageId,
-            text: message || '',
-            content: message || '',
-            message: message || '',
-            createdAt: new Date(),
-            timestamp: new Date(),
-            source: 'api',
-            isApiMessage: true,
-            senderSocketId: socketId,
-            sender: username || 'Unknown User',
-            location: location,
-            image: uploadResult.secure_url,
-            imagePublicId: uploadResult.public_id
-          };
-          
-          // Log the message object with location before saving
-          console.log('About to save message with location data:', {
-            hasLocation: location ? 'YES' : 'NO',
-            hasCoordinates: location && location.latitude && location.longitude ? 'YES' : 'NO',
-            locationData: location
-          });
-          
-          // Save to database if a username is provided
-          let savedMessage = null;
-          let userId = null;
-          
-          if (username) {
-            try {
-              // Find the user
-              const user = await User.findOne({ username });
-              if (user) {
-                userId = user._id;
-                
-                // Save message to database
-                savedMessage = await saveMessageToDatabase({
-                  text: message || '',
-                  sender: username,
-                  messageId: messageId,
-                  timestamp: new Date(),
-                  location,
-                  image: uploadResult.secure_url
-                }, userId);
-                
-                if (savedMessage) {
-                  messageObj.dbId = savedMessage._id;
+      // Configure upload with additional options
+      const uploadOptions = {
+        folder: 'gringo_messages',
+        resource_type: 'image',
+        format: 'jpg',
+        transformation: [
+          { width: 800, height: 800, crop: 'limit' },
+          { quality: 'auto:good' }
+        ],
+        timeout: 60000, // 60 second timeout
+        use_filename: true,
+        unique_filename: true
+      };
+
+      // Function to handle upload with retry logic
+      const uploadWithRetry = (buffer, options, maxRetries = 2) => {
+        return new Promise((resolve, reject) => {
+          let retryCount = 0;
+
+          const attemptUpload = () => {
+            console.log(`Attempting Cloudinary upload (attempt ${retryCount + 1}/${maxRetries + 1})`);
+            
+            const uploadStream = cloudinary.uploader.upload_stream(
+              options,
+              (error, uploadResult) => {
+                if (error) {
+                  console.error(`Upload attempt ${retryCount + 1} failed:`, error);
                   
-                  // Add location to the message object for broadcasting if saved properly
-                  if (savedMessage.location && savedMessage.location.latitude) {
-                    messageObj.location = {
-                      latitude: savedMessage.location.latitude,
-                      longitude: savedMessage.location.longitude,
-                      fuzzyLocation: savedMessage.location.fuzzyLocation
-                    };
-                    console.log(`Broadcasting message with location: (${messageObj.location.latitude}, ${messageObj.location.longitude})`);
+                  // Check if we should retry
+                  if (retryCount < maxRetries && 
+                     (error.http_code === 499 || error.http_code === 504 || error.message === 'Request Timeout')) {
+                    retryCount++;
+                    console.log(`Retrying upload (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+                    
+                    // Exponential backoff: wait longer between retries
+                    setTimeout(attemptUpload, retryCount * 2000);
+                  } else {
+                    // Max retries reached or non-retryable error
+                    reject(error);
                   }
-                  
-                  // Notify followers
-                  await notifyFollowers(userId, username, message, messageId, uploadResult.secure_url);
+                } else {
+                  resolve(uploadResult);
                 }
               }
-            } catch (error) {
-              console.error('Error saving image message to database:', error);
-            }
-          }
+            );
+            
+            // Start the upload
+            streamifier.createReadStream(buffer).pipe(uploadStream);
+          };
           
-          // Broadcast the message to clients
-          broadcastMessage(socketId, messageObj);
-          
-          return res.status(201).json({ 
-            success: true, 
-            message: 'Message with image sent', 
-            messageId,
-            dbId: savedMessage ? savedMessage._id : null,
-            imageUrl: uploadResult.secure_url
-          });
-        }
-      );
+          // Start first attempt
+          attemptUpload();
+        });
+      };
       
-      // Try adding a try/catch block around the stream creation
       try {
-        // Convert buffer to readable stream and pipe to cloudinary
-        streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
-      } catch (streamError) {
-        console.error('Error creating stream for Cloudinary upload:', streamError);
-        return res.status(500).json({ error: 'Failed to process image stream', details: streamError.message });
+        // Upload with retry logic
+        const uploadResult = await uploadWithRetry(req.file.buffer, uploadOptions);
+        
+        // Use provided messageId or create a unique ID for this message
+        let messageId = providedMessageId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
+        
+        // Prepare the message object
+        const messageObj = { 
+          id: messageId,
+          text: message || '',
+          content: message || '',
+          message: message || '',
+          createdAt: new Date(),
+          timestamp: new Date(),
+          source: 'api',
+          isApiMessage: true,
+          senderSocketId: socketId,
+          sender: username || 'Unknown User',
+          location: location,
+          image: uploadResult.secure_url,
+          imagePublicId: uploadResult.public_id
+        };
+        
+        // Log the message object with location before saving
+        console.log('About to save message with location data:', {
+          hasLocation: location ? 'YES' : 'NO',
+          hasCoordinates: location && location.latitude && location.longitude ? 'YES' : 'NO',
+          locationData: location
+        });
+        
+        // Handle case where username might be an array (from FormData with multiple username fields)
+        let senderUsername = username;
+        if (Array.isArray(username)) {
+          console.log(`WARNING: Username is an array in createMessageWithImage, using first value:`, username);
+          senderUsername = username[0]; // Take the first value
+          
+          // Update the message object with the processed username
+          messageObj.sender = senderUsername || 'Unknown User';
+        }
+        
+        // Save to database if a username is provided
+        let savedMessage = null;
+        let userId = null;
+        
+        if (senderUsername) {
+          try {
+            // Find the user
+            const user = await User.findOne({ username: senderUsername });
+            if (user) {
+              userId = user._id;
+              
+              // Save message to database
+              savedMessage = await saveMessageToDatabase({
+                text: message || '',
+                sender: senderUsername,
+                messageId: messageId,
+                timestamp: new Date(),
+                location,
+                image: uploadResult.secure_url
+              }, userId);
+              
+              if (savedMessage) {
+                messageObj.dbId = savedMessage._id;
+                
+                // Add location to the message object for broadcasting if saved properly
+                if (savedMessage.location && savedMessage.location.latitude) {
+                  messageObj.location = {
+                    latitude: savedMessage.location.latitude,
+                    longitude: savedMessage.location.longitude,
+                    fuzzyLocation: savedMessage.location.fuzzyLocation
+                  };
+                  console.log(`Broadcasting message with location: (${messageObj.location.latitude}, ${messageObj.location.longitude})`);
+                }
+                
+                // Notify followers
+                await notifyFollowers(userId, senderUsername, message, messageId, uploadResult.secure_url);
+              }
+            }
+          } catch (error) {
+            console.error('Error saving image message to database:', error);
+          }
+        }
+        
+        // Broadcast the message to clients
+        broadcastMessage(socketId, messageObj);
+        
+        return res.status(201).json({ 
+          success: true, 
+          message: 'Message with image sent', 
+          messageId,
+          dbId: savedMessage ? savedMessage._id : null,
+          imageUrl: uploadResult.secure_url
+        });
+      } catch (uploadError) {
+        console.error('Error uploading to Cloudinary:', uploadError);
+        return res.status(500).json({ error: 'Image upload failed', details: uploadError.message });
       }
-    } catch (uploadError) {
-      console.error('Error uploading to Cloudinary:', uploadError);
-      return res.status(500).json({ error: 'Image upload failed', details: uploadError.message });
+    } catch (error) {
+      console.error('Error processing message with image:', error);
+      return res.status(500).json({ error: 'Server error', details: error.message });
     }
   } catch (error) {
     console.error('Error processing message with image:', error);

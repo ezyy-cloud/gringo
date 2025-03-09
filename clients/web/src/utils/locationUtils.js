@@ -3,7 +3,7 @@
  * @param {Array} messagesArray - Array of messages
  * @returns {Object} Fallback location
  */
-export const createFallbackLocation = (messagesArray) => {
+export const createFallbackLocation = (messagesArray = []) => {
   console.log('Creating fallback location from messages array');
   
   // Try to find a location from existing messages
@@ -28,8 +28,7 @@ export const createFallbackLocation = (messagesArray) => {
   return {
     latitude: 40.7128,
     longitude: -74.0060,
-    fuzzyLocation: true,
-    error: false
+    fuzzyLocation: true
   };
 };
 
@@ -48,7 +47,7 @@ export const createVariedLocation = (baseLocation) => {
   return {
     latitude: baseLocation.latitude + latVariation,
     longitude: baseLocation.longitude + lngVariation,
-    fuzzyLocation: true // Use fuzzyLocation property instead of isFallback
+    fuzzyLocation: true // Standard property name for consistency
   };
 };
 
@@ -66,7 +65,7 @@ export const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
     return {
       latitude: baseLocation.latitude,
       longitude: baseLocation.longitude,
-      fuzzyLocation: false
+      fuzzyLocation: false // Standard property name for consistency
     };
   }
   
@@ -78,7 +77,7 @@ export const createFuzzyLocation = (baseLocation, useFuzzyLocation = true) => {
   return {
     latitude: baseLocation.latitude + latVariation,
     longitude: baseLocation.longitude + lngVariation,
-    fuzzyLocation: true // Mark as fuzzy location to match MongoDB schema
+    fuzzyLocation: true // Standard property name for consistency
   };
 };
 

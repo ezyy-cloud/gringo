@@ -41,11 +41,42 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
   // Add a custom useEffect to fetch messages when the map component mounts
   useEffect(() => {
-    console.log('🗺️ MapView: Component mounted, dispatching custom event to fetch messages');
-    // Dispatch a custom event to notify App component to fetch messages
-    const fetchMessagesEvent = new CustomEvent('map:fetchMessages');
-    window.dispatchEvent(fetchMessagesEvent);
+    // Only fetch messages on first mount, not on re-renders
+    const hasFetchedKey = 'mapview_has_fetched_messages';
+    
+    // Check if we've already fetched messages in this session
+    const hasFetched = sessionStorage.getItem(hasFetchedKey);
+    
+    if (!hasFetched) {
+      console.log('🗺️ MapView: First mount, dispatching custom event to fetch messages');
+      // Dispatch a custom event to notify App component to fetch messages
+      const fetchMessagesEvent = new CustomEvent('map:fetchMessages');
+      window.dispatchEvent(fetchMessagesEvent);
+      
+      // Mark that we've fetched messages in this session
+      sessionStorage.setItem(hasFetchedKey, 'true');
+    } else {
+      console.log('🗺️ MapView: Already fetched messages in this session, skipping');
+    }
+    
+    // Clear the fetch flag when the component is unmounted
+    return () => {
+      // Only clear if we're actually navigating away, not just re-rendering
+      if (document.visibilityState === 'hidden') {
+        sessionStorage.removeItem(hasFetchedKey);
+      }
+    };
   }, []);
+
+  // Monitor messages count changes and log when they change
+  useEffect(() => {
+    const messagesCount = messages?.length || 0;
+    
+    if (prevMessagesCountRef.current !== messagesCount) {
+      console.log(`MapView: Message count changed from ${prevMessagesCountRef.current} to ${messagesCount}`);
+      prevMessagesCountRef.current = messagesCount;
+    }
+  }, [messages]);
 
   // Handle navigation to user profile
   const navigateToProfile = (username, e) => {

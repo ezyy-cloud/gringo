@@ -14,6 +14,7 @@ const createSocketMiddleware = (io) => {
       // Create notification payload
       const notificationPayload = {
         type: 'newMessage',
+        eventType: 'message',  // Consistent event type
         messageId,
         sender: username,
         preview: messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText,
@@ -62,6 +63,12 @@ const createSocketMiddleware = (io) => {
 
   // Helper function to broadcast message to clients
   const broadcastMessage = (socketId, messageObj) => {
+    // Ensure message has eventType set for consistency
+    const enhancedMessage = {
+      ...messageObj,
+      eventType: 'message' // Set standard event type for all messages
+    };
+    
     if (socketId && socketId !== 'unknown') {
       // Find the sender's socket to use for broadcasting
       const senderSocket = Array.from(io.sockets.sockets.values())
@@ -69,27 +76,27 @@ const createSocketMiddleware = (io) => {
       
       if (senderSocket) {
         // If we found the sender's socket, use it to broadcast to everyone else
-        senderSocket.broadcast.emit('newMessage', messageObj);
+        senderSocket.broadcast.emit('message', enhancedMessage);
         // Trigger a refresh of messages from the database
         senderSocket.broadcast.emit('refreshMessages');
-        console.log('API Message broadcast to all other clients with ID:', messageObj.id);
+        console.log('API Message broadcast to all other clients with ID:', enhancedMessage.id);
       } else {
         // Fall back to filtering manually
         io.sockets.sockets.forEach(socket => {
           if (socket.id !== socketId) {
-            socket.emit('newMessage', messageObj);
+            socket.emit('message', enhancedMessage);
             // Trigger a refresh of messages from the database
             socket.emit('refreshMessages');
           }
         });
-        console.log('API Message sent to all other clients by manual filtering with ID:', messageObj.id);
+        console.log('API Message sent to all other clients by manual filtering with ID:', enhancedMessage.id);
       }
     } else {
       // If no valid socket ID, send to everyone
-      io.emit('newMessage', messageObj);
+      io.emit('message', enhancedMessage);
       // Trigger a refresh of messages from the database
       io.emit('refreshMessages');
-      console.log('API Message broadcast to all clients with ID:', messageObj.id);
+      console.log('API Message broadcast to all clients with ID:', enhancedMessage.id);
     }
   };
 

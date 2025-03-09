@@ -21,7 +21,9 @@ const AppContent = ({
   toggleDarkMode,
   notifications,
   onClearNotifications,
-  isLoading
+  isLoading,
+  canUserSendMessage,
+  getTimeRemainingBeforeNextMessage
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [countdownModalOpen, setCountdownModalOpen] = useState(false);
@@ -38,50 +40,6 @@ const AppContent = ({
     }
   };
 
-  // Check if user can share an update (last update was more than 30 minutes ago)
-  const canUserShareUpdate = () => {
-    if (!user || !messages || messages.length === 0) return true;
-    
-    // Filter messages by current user
-    const userMessages = messages.filter(msg => msg.sender === user.username);
-    if (userMessages.length === 0) return true;
-    
-    // Get user's most recent message timestamp
-    const latestUserMessage = userMessages.reduce((latest, current) => {
-      return new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current;
-    }, userMessages[0]);
-    
-    // Calculate time difference
-    const thirtyMinutesInMs = 30 * 60 * 1000;
-    const now = new Date();
-    const lastMessageTime = new Date(latestUserMessage.timestamp);
-    const timeDifference = now - lastMessageTime;
-    
-    return timeDifference >= thirtyMinutesInMs;
-  };
-
-  // Calculate time remaining before user can share another update
-  const getTimeRemaining = () => {
-    if (!user || !messages || messages.length === 0) return 0;
-    
-    // Filter messages by current user
-    const userMessages = messages.filter(msg => msg.sender === user.username);
-    if (userMessages.length === 0) return 0;
-    
-    // Get user's most recent message timestamp
-    const latestUserMessage = userMessages.reduce((latest, current) => {
-      return new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current;
-    }, userMessages[0]);
-    
-    // Calculate time difference
-    const thirtyMinutesInMs = 30 * 60 * 1000;
-    const now = new Date();
-    const lastMessageTime = new Date(latestUserMessage.timestamp);
-    const timeDifference = now - lastMessageTime;
-    
-    return Math.max(0, thirtyMinutesInMs - timeDifference);
-  };
-
   // Format milliseconds to minutes and seconds
   const formatTimeRemaining = (ms) => {
     const minutes = Math.floor(ms / 60000);
@@ -90,11 +48,11 @@ const AppContent = ({
   };
 
   const openModal = () => {
-    if (canUserShareUpdate()) {
+    if (canUserSendMessage()) {
       setIsModalOpen(true);
     } else {
       // Calculate initial time remaining
-      const initialTimeRemaining = getTimeRemaining();
+      const initialTimeRemaining = getTimeRemainingBeforeNextMessage();
       setTimeRemaining(initialTimeRemaining);
       
       // Open countdown modal
@@ -120,6 +78,43 @@ const AppContent = ({
       setCountdownInterval(interval);
     }
   };
+  
+  // Wrapper for handleSocketMessage to check for 30-minute limit
+  const handleMessageSubmit = async (message, formData) => {
+    const result = await handleSocketMessage(message, formData);
+    
+    if (result && result.error) {
+      // Show countdown modal if user tries to bypass the 30-minute limit
+      const initialTimeRemaining = result.timeRemaining || getTimeRemainingBeforeNextMessage();
+      setTimeRemaining(initialTimeRemaining);
+      setCountdownModalOpen(true);
+      closeModal();
+      
+      // Setup interval to update countdown
+      const interval = setInterval(() => {
+        setTimeRemaining(prevTime => {
+          const newTime = Math.max(0, prevTime - 1000);
+          
+          // If countdown reaches zero, clear interval and allow posting
+          if (newTime <= 0) {
+            clearInterval(interval);
+            setCountdownModalOpen(false);
+            return 0;
+          }
+          
+          return newTime;
+        });
+      }, 1000);
+      
+      // Store interval ID for cleanup
+      setCountdownInterval(interval);
+      
+      return false;
+    }
+    
+    closeModal();
+    return true;
+  };
 
   // Clean up interval on unmount
   useEffect(() => {
@@ -129,6 +124,17 @@ const AppContent = ({
       }
     };
   }, [countdownInterval]);
+
+  const getInitialRoute = () => {
+    // Use last active tab from local storage or default to map
+    return createPath(user?.username ? (localStorage.getItem('lastActiveTab') || 'map') : 'map');
+  };
+
+  const createPath = (path) => {
+    if (path === 'map') return '/map';
+    if (path === 'profile' && user?.username) return `/profile/${user.username}`;
+    return '/map'; // Default to map
+  };
 
   return (
     <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
@@ -168,7 +174,7 @@ const AppContent = ({
             <MessageModal 
               isOpen={isModalOpen} 
               onClose={closeModal} 
-              onShareUpdate={handleSocketMessage}
+              onShareUpdate={handleMessageSubmit}
               disabled={!isConnected || !user}
               placeholder="What's happening around?"
               isDarkMode={isDarkMode}
@@ -199,7 +205,7 @@ const AppContent = ({
                       type="button" 
                       className="cancel-button"
                       onClick={closeCountdownModal}
-                      style={{ margin: '0 auto' }}
+                      style={{ margin: '20px auto' }}
                     >
                       Close
                     </button>
@@ -228,7 +234,9 @@ AppContent.propTypes = {
   toggleDarkMode: PropTypes.func.isRequired,
   notifications: PropTypes.array,
   onClearNotifications: PropTypes.func,
-  isLoading: PropTypes.bool
+  isLoading: PropTypes.bool,
+  canUserSendMessage: PropTypes.func,
+  getTimeRemainingBeforeNextMessage: PropTypes.func
 };
 
 export default AppContent; 

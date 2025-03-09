@@ -1,14 +1,24 @@
 import socketClientFactory from '../socket/SocketClientFactory';
 
-// Server URL - from environment variables
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Server URL - from environment variables or use relative URL for development
+// Using a relative URL will work with the Vite proxy we set up
+const SERVER_URL = '/'; // Using relative URL which will be proxied by Vite
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'; // Keep the full URL for non-socket API calls
 
 // Create a service wrapper for the socket client
 const socketService = {
   // Connect to the server
   connect: (callbacks = {}, username = null) => {
+    console.log('🔌 SocketService: Connecting to socket with relative URL for proxy support');
     // Get the main socket client from the factory
     const mainClient = socketClientFactory.getClient('main', 'main', SERVER_URL);
+    
+    // Ensure any existing socket is disconnected first
+    if (mainClient.isConnected()) {
+      console.log('🔌 SocketService: Closing existing connection before reconnecting');
+      mainClient.disconnect();
+    }
+    
     mainClient.connect(callbacks, username);
   },
 
@@ -48,16 +58,28 @@ const socketService = {
     return mainClient.getSocketId();
   },
   
-  // Request notification permission explicitly
-  requestNotificationPermission: async () => {
+  // Get the socket instance directly (use with caution)
+  getSocket: () => {
+    const mainClient = socketClientFactory.getClient('main');
+    return mainClient.getSocket();
+  },
+  
+  // Check if notifications are supported by the browser
+  areNotificationsSupported: () => {
+    const mainClient = socketClientFactory.getClient('main');
+    return mainClient.notificationSupported;
+  },
+  
+  // Request notification permission
+  async requestNotificationPermission() {
     const mainClient = socketClientFactory.getClient('main');
     return mainClient.requestNotificationPermission();
   },
   
-  // Check if notifications are supported
-  areNotificationsSupported: () => {
+  // Show a notification
+  showNotification: (title, options) => {
     const mainClient = socketClientFactory.getClient('main');
-    return mainClient.areNotificationsSupported();
+    return mainClient.showNotification(title, options);
   },
   
   // Get connection state constants
@@ -66,11 +88,123 @@ const socketService = {
     return mainClient.CONNECTION_STATES;
   },
   
-  // Get the socket instance for direct event handling
-  getSocket: () => {
+  // Diagnostic method to check if server is reachable
+  checkServerStatus: async () => {
+    console.log('🔌 SocketService: Checking server status at:', API_URL);
+    
+    // Add timestamp tracking to prevent excessive calls
+    const now = Date.now();
+    const lastCheckKey = 'socketService_lastServerCheck';
+    const lastCheck = parseInt(sessionStorage.getItem(lastCheckKey) || '0');
+    const minTimeBetweenChecks = 10000; // 10 seconds minimum between checks
+    
+    if (now - lastCheck < minTimeBetweenChecks) {
+      console.log('🔌 SocketService: Skipping server check - too soon since last check');
+      
+      // Return the last result if available
+      const lastResultKey = 'socketService_lastServerCheckResult';
+      const lastResult = sessionStorage.getItem(lastResultKey);
+      if (lastResult) {
+        return JSON.parse(lastResult);
+      }
+      
+      // If no last result, assume server is unreachable
+      return {
+        success: false,
+        message: 'Server check skipped (rate limited)',
+        rateLimited: true
+      };
+    }
+    
+    // Store the current timestamp
+    sessionStorage.setItem(lastCheckKey, now.toString());
+    
+    // Try multiple endpoints to check server availability
+    // BUT only try one endpoint at a time instead of all of them
+    const endpointsToTry = [
+      '/api/status', // Try status first as it's likely lightweight
+      '/api/messages', // Only try this if status fails
+      '/api/health',
+      '/api/ping'
+    ];
+    
+    // Only try one endpoint instead of looping through all
+    const endpoint = endpointsToTry[0]; // Just use the first endpoint
+    
+    try {
+      console.log(`🔌 SocketService: Trying endpoint ${endpoint}`);
+      
+      // For the messages endpoint, use a GET request since it's likely to require auth
+      const authToken = localStorage.getItem('token');
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      };
+      
+      // Add auth token if available
+      if (authToken && endpoint === '/api/messages') {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const response = await fetch(`${endpoint}`, { // Use relative URLs for proxying
+        method: 'GET',
+        headers: headers
+      });
+      
+      // Any response (even 404 or 401) indicates the server is reachable
+      console.log(`🔌 SocketService: Got response from ${endpoint} with status:`, response.status);
+      
+      const result = {
+        success: response.ok || response.status === 401, // 401 means server is up but we need auth
+        message: `Server is reachable (${endpoint})`,
+        status: response.status,
+        endpoint: endpoint
+      };
+      
+      // Store the result
+      sessionStorage.setItem('socketService_lastServerCheckResult', JSON.stringify(result));
+      
+      return result;
+    } catch (error) {
+      console.error(`🔌 SocketService: Failed to fetch ${endpoint}:`, error);
+      
+      const result = {
+        success: false,
+        message: `Server unreachable: ${error.message}`,
+        endpoint: endpoint
+      };
+      
+      // Store the result
+      sessionStorage.setItem('socketService_lastServerCheckResult', JSON.stringify(result));
+      
+      return result;
+    }
+  },
+  
+  // Get the socket ID for identifying the client
+  getServerUrl: () => {
+    return API_URL;
+  },
+  
+  // Enable fallback mode (for when the server is unreachable)
+  enableFallbackMode: () => {
+    console.log('🔌 SocketService: Enabling fallback mode');
     const mainClient = socketClientFactory.getClient('main');
-    return mainClient.getSocket();
-  }
+    mainClient.enableFallbackMode();
+  },
+  
+  // Disable fallback mode and attempt normal connection
+  disableFallbackMode: () => {
+    console.log('🔌 SocketService: Disabling fallback mode');
+    const mainClient = socketClientFactory.getClient('main');
+    mainClient.disableFallbackMode();
+  },
+  
+  // Check if in fallback mode
+  isFallbackMode: () => {
+    const mainClient = socketClientFactory.getClient('main');
+    return mainClient ? mainClient.isFallbackMode() : false;
+  },
 };
 
 export default socketService; 

@@ -8,6 +8,81 @@
 const axios = require('axios');
 
 /**
+ * Make an API request with retry capabilities
+ *
+ * @param {Object} options - Request options
+ * @param {string} options.url - URL to request
+ * @param {string} options.method - HTTP method (GET, POST, etc.)
+ * @param {Object} options.params - URL parameters
+ * @param {Object} options.data - Request body for POST requests
+ * @param {Object} options.headers - Request headers
+ * @param {number} options.maxRetries - Maximum number of retries
+ * @param {number} options.retryDelay - Delay between retries in ms
+ * @returns {Object} - Response data
+ */
+const makeRequest = async (options) => {
+  const {
+    url,
+    method = 'GET',
+    params = {},
+    data = null,
+    headers = {},
+    maxRetries = 3,
+    retryDelay = 1000,
+  } = options;
+  
+  let attempts = 0;
+  
+  while (attempts <= maxRetries) {
+    try {
+      // Make the request with axios
+      const response = await axios({
+        url,
+        method,
+        params,
+        data,
+        headers,
+        timeout: 10000 // 10 second timeout
+      });
+      
+      return response;
+    } catch (error) {
+      attempts++;
+      
+      // Check if we should retry
+      if (attempts <= maxRetries && shouldRetry(error)) {
+        console.log(`API request failed (attempt ${attempts}/${maxRetries}): ${error.message}`);
+        
+        // Wait before retrying with exponential backoff
+        const delay = retryDelay * Math.pow(2, attempts - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      
+      // If we've exhausted retries or shouldn't retry, throw the error
+      throw error;
+    }
+  }
+};
+
+/**
+ * Determine if a failed request should be retried
+ *
+ * @param {Error} error - The error that occurred
+ * @returns {boolean} - Whether to retry the request
+ */
+const shouldRetry = (error) => {
+  // Retry on network errors
+  if (!error.response) {
+    return true;
+  }
+  
+  // Retry on certain status codes
+  const retryStatusCodes = [429, 500, 502, 503, 504];
+  return retryStatusCodes.includes(error.response.status);
+};
+
+/**
  * Validate and fix image URLs
  * 
  * @param {string} imageUrl - The image URL to validate
@@ -143,6 +218,7 @@ const formatContentWithUrl = (title, url, source = null, maxChars = 120) => {
 };
 
 module.exports = {
+  makeRequest,
   validateImageUrl,
   processApiResults,
   downloadWithRetry,

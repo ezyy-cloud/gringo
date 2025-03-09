@@ -35,6 +35,17 @@ const createSocketMiddleware = require('./middleware/socketMiddleware');
 const app = express();
 const server = http.createServer(app);
 
+// Set server timeout for longer requests (like file uploads)
+server.timeout = 120000; // 2 minutes
+
+// Trust proxy configuration for Express Rate Limit
+// Instead of setting to true (which is too permissive), specify trusted proxies
+// For production, this should be your load balancer or reverse proxy IP addresses
+app.set('trust proxy', process.env.NODE_ENV === 'production' 
+  ? ['loopback', 'linklocal', 'uniquelocal'] // For production: more restrictive
+  : ['127.0.0.1', '::1'] // For development: localhost only
+);
+
 // Initialize Redis client
 const redisClient = createClient({
   username: process.env.REDIS_USERNAME || 'default',
@@ -104,6 +115,11 @@ const apiLimiter = rateLimit({
   max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for development
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Use a more secure IP identifier
+  keyGenerator: (req, res) => {
+    // Get the client's IP address, considering the trusted proxy settings above
+    return req.ip; 
+  },
   message: {
     status: 429,
     message: 'Too many requests, please try again later.'
@@ -116,9 +132,14 @@ const authLimiter = rateLimit({
   max: process.env.NODE_ENV === 'development' ? 50 : 5, // Higher limit for development
   standardHeaders: true,
   legacyHeaders: false,
+  // Use a more secure IP identifier
+  keyGenerator: (req, res) => {
+    // Get the client's IP address, considering the trusted proxy settings above
+    return req.ip;
+  },
   message: {
     status: 429,
-    message: 'Too many authentication attempts, please try again later.'
+    message: 'Too many auth attempts, please try again later.'
   }
 });
 
@@ -151,9 +172,17 @@ app.use('/api/', (req, res, next) => {
     return next();
   }
   
-  // Skip rate limiting and authentication for bot microservice endpoints
+  // Skip rate limiting for bot microservice endpoints
   if (req.path === '/bots/active' || req.path === '/bots/debug-api-key') {
     console.log('Skipping rate limiting for bot microservice endpoint:', req.path);
+    return next();
+  }
+  
+  // Skip rate limiting if the request has a valid bot API key
+  const apiKey = req.headers['x-api-key'];
+  const expectedBotApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
+  if (apiKey && apiKey === expectedBotApiKey) {
+    console.log('Skipping rate limiting for bot client with valid API key');
     return next();
   }
   
@@ -164,6 +193,14 @@ app.use('/api/', (req, res, next) => {
 app.use('/api/auth/', (req, res, next) => {
   // Skip rate limiting for admin check during development
   if (process.env.NODE_ENV === 'development' && req.path === '/admin') {
+    return next();
+  }
+  
+  // Skip rate limiting if the request has a valid bot API key
+  const apiKey = req.headers['x-api-key'];
+  const expectedBotApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
+  if (apiKey && apiKey === expectedBotApiKey) {
+    console.log('Skipping auth rate limiting for bot client with valid API key');
     return next();
   }
   
@@ -178,8 +215,9 @@ app.use('/api/auth/', (req, res, next) => {
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-  }
+    fileSize: 10 * 1024 * 1024, // Increase to 10MB (from 5MB)
+  },
+  preservePath: true
 });
 
 // Set up Socket.IO
@@ -311,7 +349,10 @@ io.on('connection', (socket) => {
   socket.on('message', async (data) => {
     try {
       const { message, username, location } = data;
-      console.log('Message received:', message, 'from', username || 'anonymous');
+      
+      // Use socket's username if set during authentication, or fall back to data
+      const senderUsername = socket.username || username || 'Anonymous';
+      console.log('Message received:', message, 'from', senderUsername);
       
       // Create a unique ID for this message
       let messageId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -324,26 +365,40 @@ io.on('connection', (socket) => {
         message: message,
         createdAt: new Date(),
         timestamp: new Date(),
-        sender: username || 'Anonymous',
+        sender: senderUsername,
         senderSocketId: socket.id,
-        location
+        location,
+        eventType: 'message' // Standard event type
       };
       
       // Save to database if a username is provided
       let savedMessage = null;
       let userId = null;
       
-      if (username) {
+      if (senderUsername && senderUsername !== 'Anonymous') {
         try {
           // Find the user
-          const user = await User.findOne({ username });
+          const user = await User.findOne({ username: senderUsername });
           if (user) {
             userId = user._id;
             
-            // Save message to database
-            const messageToSave = new Message({
+            // SOLUTION 1 (commented out): Use the saveMessageToDatabase function
+            /*
+            const messageController = require('./controllers/messageController');
+            savedMessage = await messageController.saveMessageToDatabase({
               text: message,
-              sender: username,
+              sender: senderUsername,
+              messageId: messageId,
+              timestamp: new Date(),
+              location
+            }, user._id);
+            */
+            
+            // SOLUTION 2: Create Message with correct field names
+            const messageToSave = new Message({
+              messageId: messageId,  // Add the required messageId field
+              text: message,
+              senderUsername: senderUsername,  // Use the correct field name
               userId: userId,
               timestamp: new Date(),
               location
@@ -356,7 +411,7 @@ io.on('connection', (socket) => {
               messageObj.dbId = messageId;
               
               // Notify followers
-              await socketMiddleware.notifyFollowers(userId, username, message, messageId);
+              await socketMiddleware.notifyFollowers(userId, senderUsername, message, messageId);
             }
           }
         } catch (error) {
@@ -375,6 +430,98 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('Error handling message:', error);
+      socket.emit('error', { message: 'Error processing your message' });
+    }
+  });
+  
+  // Handle sendMessage events (for backward compatibility with bots client)
+  socket.on('sendMessage', async (data) => {
+    try {
+      // Extract message data with different possible field names for compatibility
+      const message = data.message || data.text || data.content;
+      
+      // Use authenticated socket username, data username/sender, or Anonymous as fallback
+      const senderUsername = socket.username || data.username || data.sender || 'Anonymous';
+      const location = data.location || null;
+      
+      console.log('SendMessage received:', message, 'from', senderUsername);
+      
+      // Create a unique ID for this message (use provided ID or create new one)
+      let messageId = data.messageId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
+      
+      // Prepare the message object
+      const messageObj = { 
+        id: messageId,
+        text: message,
+        content: message, 
+        message: message,
+        createdAt: new Date(),
+        timestamp: new Date(),
+        sender: senderUsername,
+        senderSocketId: socket.id,
+        location,
+        eventType: 'message' // Standard event type
+      };
+      
+      // Save to database if a username is provided and not 'Anonymous'
+      let savedMessage = null;
+      let userId = null;
+      
+      if (senderUsername && senderUsername !== 'Anonymous') {
+        try {
+          // Find the user
+          const user = await User.findOne({ username: senderUsername });
+          if (user) {
+            userId = user._id;
+            
+            // SOLUTION 1 (commented out): Use the saveMessageToDatabase function
+            /*
+            const messageController = require('./controllers/messageController');
+            savedMessage = await messageController.saveMessageToDatabase({
+              text: message,
+              sender: senderUsername,
+              messageId: messageId,
+              timestamp: new Date(),
+              location
+            }, user._id);
+            */
+            
+            // SOLUTION 2: Create Message with correct field names
+            const messageToSave = new Message({
+              messageId: messageId,  // Add the required messageId field
+              text: message,
+              senderUsername: senderUsername,  // Use the correct field name
+              userId: userId,
+              timestamp: new Date(),
+              location
+            });
+            
+            savedMessage = await messageToSave.save();
+            
+            if (savedMessage) {
+              messageId = savedMessage._id;
+              messageObj.dbId = messageId;
+              
+              // Notify followers
+              await socketMiddleware.notifyFollowers(userId, senderUsername, message, messageId);
+            }
+          }
+        } catch (error) {
+          console.error('Error saving message to database:', error);
+        }
+      }
+      
+      // Broadcast message to all other clients
+      socket.broadcast.emit('message', messageObj);
+      
+      // Acknowledge receipt to the sender with the message ID
+      socket.emit('messageAck', { 
+        id: messageId,
+        dbId: savedMessage ? savedMessage._id : null,
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Error handling sendMessage:', error);
       socket.emit('error', { message: 'Error processing your message' });
     }
   });

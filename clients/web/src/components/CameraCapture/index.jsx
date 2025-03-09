@@ -29,6 +29,7 @@ const STICKERS = [
 
 const CameraCapture = ({ onCapture, onClose }) => {
   const webcamRef = useRef(null);
+  const previewContainerRef = useRef(null);
   const [imgSrc, setImgSrc] = useState(null);
   const [facingMode, setFacingMode] = useState("user");
   const [isCapturing, setIsCapturing] = useState(true);
@@ -44,13 +45,6 @@ const CameraCapture = ({ onCapture, onClose }) => {
     aspectRatio: 1,
     frameRate: { ideal: 30, max: 60 }
   });
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const setupCamera = async () => {
@@ -82,14 +76,34 @@ const CameraCapture = ({ onCapture, onClose }) => {
     setupCamera();
   }, [facingMode]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (previewContainerRef.current && draggedSticker) {
+      const element = previewContainerRef.current;
+      
+      element.addEventListener('touchmove', handleTouchMove, { passive: false });
+      element.addEventListener('touchend', handleTouchEnd, { passive: false });
+      
+      return () => {
+        element.removeEventListener('touchmove', handleTouchMove, { passive: false });
+        element.removeEventListener('touchend', handleTouchEnd, { passive: false });
+      };
+    }
+  }, [draggedSticker]);
+
   const capture = useCallback(() => {
     if (webcamRef.current) {
       try {
-        // Use a high quality JPEG format when taking the screenshot
         const imageSrc = webcamRef.current.getScreenshot({
           width: videoConstraints.width.ideal,
           height: videoConstraints.height.ideal,
-          quality: 0.92 // Use high quality to avoid compression artifacts
+          quality: 0.92
         });
         
         if (!imageSrc) {
@@ -97,7 +111,6 @@ const CameraCapture = ({ onCapture, onClose }) => {
           return;
         }
         
-        // Validate the image format
         if (!imageSrc.startsWith('data:image/')) {
           console.error('Invalid image format captured');
           return;
@@ -129,56 +142,45 @@ const CameraCapture = ({ onCapture, onClose }) => {
       const img = new Image();
       
       img.onload = () => {
-        // Set canvas size to match the image
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
 
-        // Get preview container dimensions for scaling
         const previewContainer = document.querySelector('.preview-container');
         const previewRect = previewContainer.getBoundingClientRect();
 
-        // Draw the base image with filter
         ctx.filter = activeFilter.filter;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         ctx.filter = 'none';
 
-        // Calculate scaling factors
         const scaleX = canvas.width / previewRect.width;
         const scaleY = canvas.height / previewRect.height;
 
-        // Draw stickers
         activeStickers.forEach(sticker => {
           const content = sticker.type === 'time' ? currentTime : sticker.content;
           const scale = sticker.scale || 1;
           const rotation = sticker.rotation || 0;
           
-          // Calculate scaled positions
           const x = (sticker.position?.x || 0) * scaleX;
           const y = (sticker.position?.y || 0) * scaleY;
           
-          // Calculate base font size and scale it
           const baseFontSize = 32 * scaleX;
           const scaledFontSize = Math.round(baseFontSize * scale);
           
           ctx.save();
           
-          // Position at the sticker's center point and apply rotation
           ctx.translate(x, y);
           ctx.rotate(rotation * Math.PI / 180);
           
-          // Set text styles
           ctx.font = `${scaledFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'center';
 
-          // Add text shadow scaled to image size
           ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
           ctx.shadowBlur = 4 * scaleX;
           ctx.shadowOffsetX = 2 * scaleX;
           ctx.shadowOffsetY = 2 * scaleY;
           
-          // Draw the text/emoji
           ctx.fillStyle = 'white';
           ctx.fillText(content, 0, 0);
           
@@ -199,29 +201,26 @@ const CameraCapture = ({ onCapture, onClose }) => {
     }
     
     try {
-      // Merge stickers with the image if there are any
       if (activeStickers.length > 0) {
         mergeImageWithStickers().then(finalImage => {
-          // Validate the merged image before passing it back
           if (!finalImage || !finalImage.startsWith('data:image/')) {
             console.error('Invalid merged image format');
-            onCapture(imgSrc); // Fall back to the original image if merging failed
+            onCapture(imgSrc);
           } else {
             console.log('Image with stickers generated successfully');
             onCapture(finalImage);
           }
         }).catch(err => {
           console.error('Error merging stickers:', err);
-          onCapture(imgSrc); // Fall back to the original image if merging failed
+          onCapture(imgSrc);
         });
       } else {
-        // No stickers, just use the captured image
         console.log('Using original captured image (no stickers)');
         onCapture(imgSrc);
       }
     } catch (error) {
       console.error('Error confirming image:', error);
-      onCapture(imgSrc); // Fall back to the original image if an error occurs
+      onCapture(imgSrc);
     }
   };
 
@@ -521,8 +520,7 @@ const CameraCapture = ({ onCapture, onClose }) => {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
+              ref={previewContainerRef}
             >
               <img 
                 src={imgSrc} 

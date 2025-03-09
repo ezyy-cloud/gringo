@@ -93,10 +93,28 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    // Proxy configuration for development
+    proxy: {
+      '/socket.io': {
+        target: 'http://localhost:3000',
+        ws: true, // Enable WebSocket proxying
+        changeOrigin: true,
+        secure: false
+      },
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false
+      }
+    }
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@components': path.resolve(__dirname, 'src/components'),
     },
   },
+  // Ensure base is set correctly - this helps with path resolution
+  base: '/'
 })

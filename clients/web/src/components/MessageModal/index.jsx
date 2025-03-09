@@ -100,13 +100,21 @@ const MessageModal = ({ isOpen, onClose, onShareUpdate, placeholder, disabled, i
         formData.append('message', trimmedMessage);
         formData.append('fuzzyLocation', fuzzyLocation.toString());
         
+        // Note: Username is now handled in apiService.sendMessageWithImage
+        // to ensure consistent handling and avoid duplication
+        
         // Send to the server
-        onShareUpdate(trimmedMessage, formData);
+        const result = await onShareUpdate(trimmedMessage, formData);
         
         // Reset state
         setMessage('');
         setImage(null);
         onClose(); // Close the modal after sending
+
+        if (result) {
+          // Handle the result from onShareUpdate
+          console.log('Countdown shown');
+        }
       } catch (error) {
         console.error('Error uploading image:', error);
         alert('Failed to upload the image. Please try again.');

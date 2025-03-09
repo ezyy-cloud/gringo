@@ -16,62 +16,96 @@ class MainSocketClient extends BaseSocketClient {
    * Override setupEventListeners to add specific event handling
    */
   setupEventListeners(callbacks) {
+    console.log('🔌 MainSocketClient: Setting up event listeners');
+    
     // Call parent method to setup basic event listeners
     super.setupEventListeners(callbacks);
     
+    if (!this.socket) {
+      console.error('🔌 MainSocketClient: Socket not initialized in setupEventListeners');
+      return;
+    }
+    
     // Heartbeat response 
     this.socket.on('heartbeatAck', (data) => {
-      // Could calculate latency here if needed
+      console.log('🔌 MainSocketClient: Received heartbeat acknowledgment');
     });
 
     // Welcome message
     this.socket.on('welcome', (data) => {
+      console.log('🔌 MainSocketClient: Received welcome message', data);
       if (callbacks.onWelcome) callbacks.onWelcome(data);
     });
 
-    // Listen for new messages
+    // Listen for new messages - handle both 'message' and 'newMessage' events
     this.socket.on('newMessage', (data) => {
-      console.log('⚡ Socket: Received new message:', data);
+      console.log('🔌 MainSocketClient: Received new message event', data);
       if (callbacks.onNewMessage) callbacks.onNewMessage(data);
       
       // Check if the message is from a user being followed
       // and process notification if needed
       if (data.isFromFollowedUser) {
+        console.log('🔌 MainSocketClient: Message is from followed user, processing notification');
         this.processNotification(data, callbacks);
       }
     });
     
+    // Also handle 'message' event the same way as 'newMessage' for consistency
+    this.socket.on('message', (data) => {
+      console.log('🔌 MainSocketClient: Received message event', data);
+      if (callbacks.onNewMessage) callbacks.onNewMessage(data);
+      
+      // Check if the message is from a user being followed
+      // and process notification if needed
+      if (data.isFromFollowedUser) {
+        console.log('🔌 MainSocketClient: Message is from followed user, processing notification');
+        this.processNotification(data, callbacks);
+      }
+    });
+    
+    // Handle message acknowledgment
+    this.socket.on('messageAck', (data) => {
+      console.log('🔌 MainSocketClient: Received message acknowledgment', data);
+      if (callbacks.onMessageAck) callbacks.onMessageAck(data);
+    });
+    
     // Listen for refresh messages signal
     this.socket.on('refreshMessages', () => {
-      console.log('⚡ Socket: Received refreshMessages signal');
+      console.log('🔌 MainSocketClient: Received refreshMessages signal');
       if (callbacks.onRefreshMessages) callbacks.onRefreshMessages();
     });
     
     // Listen for user status changes
     this.socket.on('userStatusChange', (data) => {
+      console.log('🔌 MainSocketClient: Received user status change', data);
       if (callbacks.onUserStatusChange) callbacks.onUserStatusChange(data);
     });
     
-    // Listen for notification about message likes/unlikes
+    // Listen for message liked events
     this.socket.on('messageLiked', (data) => {
+      console.log('🔌 MainSocketClient: Received message liked event', data);
       if (callbacks.onMessageLiked) callbacks.onMessageLiked(data);
     });
     
+    // Listen for message unliked events
     this.socket.on('messageUnliked', (data) => {
+      console.log('🔌 MainSocketClient: Received message unliked event', data);
       if (callbacks.onMessageUnliked) callbacks.onMessageUnliked(data);
     });
     
-    // Listen for notifications about followed users posting
-    this.socket.on('newFollowedUserMessage', (data) => {
-      console.log('⚡ Socket: Received new message from followed user:', data);
-      
-      // Process notification with appropriate handling
-      this.processNotification(data, callbacks);
+    // Listen for message deleted events
+    this.socket.on('messageDeleted', (data) => {
+      console.log('🔌 MainSocketClient: Received message deleted event', data);
+      if (callbacks.onMessageDeleted) callbacks.onMessageDeleted(data);
     });
     
-    // Message deleted events
-    this.socket.on('messageDeleted', (data) => {
-      if (callbacks.onMessageDeleted) callbacks.onMessageDeleted(data);
+    // Followed user message events (for notifications)
+    this.socket.on('newFollowedUserMessage', (data) => {
+      console.log('🔌 MainSocketClient: Received message from followed user', data);
+      if (callbacks.onFollowedUserMessage) callbacks.onFollowedUserMessage(data);
+      
+      // Process notification for this message
+      this.processNotification(data, callbacks);
     });
   }
 
@@ -83,15 +117,41 @@ class MainSocketClient extends BaseSocketClient {
    * @returns {number} Message sequence number
    */
   sendMessage(message, username = null, location = null) {
+    if (!this.socket) {
+      console.error('🔌 MainSocketClient: Socket not initialized in sendMessage');
+      return -1;
+    }
+    
+    // If no username is provided and we don't have a currentUsername, log error
+    if (!username && !this.currentUsername) {
+      console.error('🔌 MainSocketClient: No username provided for message');
+      return -1;
+    }
+    
+    // Use the current username if available, or the provided username
+    const senderUsername = username || this.currentUsername;
+    console.log('🔌 MainSocketClient: Sending message as:', senderUsername);
+    
+    // Create a unique message ID
     const messageId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
     
-    return this.emitWithQueue('sendMessage', { 
-      message,
-      messageId,  // Add unique message ID for deduplication
-      username: username || this.currentUsername, // Include username if provided
-      location: location,  // Include location if provided
+    // Prepare message payload
+    const messagePayload = { 
+      message,  // The actual message text
+      messageId,  // Unique message ID for deduplication
+      username: senderUsername, // Username must be included for server to save the message
+      sender: senderUsername, // Include sender field for backward compatibility
+      location: location || null,  // Location data (if available)
       timestamp: Date.now()
-    });
+    };
+    
+    // Add detailed logging of the full message payload
+    console.log('🔌 MainSocketClient: DETAILED MESSAGE PAYLOAD:', JSON.stringify(messagePayload, null, 2));
+    console.log('🔌 MainSocketClient: Username value:', senderUsername);
+    console.log('🔌 MainSocketClient: Current authenticated username:', this.currentUsername);
+    
+    // Use 'sendMessage' event to match the bots client implementation
+    return this.emitWithQueue('sendMessage', messagePayload);
   }
 
   /**
@@ -100,9 +160,21 @@ class MainSocketClient extends BaseSocketClient {
    * @returns {number} Message sequence number
    */
   resendMessage(messageData) {
-    // Add a new timestamp and sequence number but keep original message ID
+    if (!this.socket) {
+      console.error('🔌 MainSocketClient: Socket not initialized in resendMessage');
+      return -1;
+    }
+    
+    // Ensure we include a username
+    const senderUsername = messageData.username || this.currentUsername;
+    if (!senderUsername) {
+      console.error('🔌 MainSocketClient: No username available for resending message');
+    }
+    
+    // Use 'sendMessage' event to match the bots client implementation
     return this.emitWithQueue('sendMessage', {
       ...messageData,
+      username: senderUsername,
       timestamp: Date.now(),
       isResend: true
     });
@@ -118,49 +190,54 @@ class MainSocketClient extends BaseSocketClient {
 
   /**
    * Request notification permission
-   * @returns {Promise<boolean>} Permission granted status
+   * @returns {Promise<boolean>} Whether permission was granted
    */
   async requestNotificationPermission() {
+    console.log('🔌 MainSocketClient: Requesting notification permission');
+    
+    // Check if notifications are supported
     if (!this.notificationSupported) {
-      return false;
-    }
-    
-    if (Notification.permission === 'granted') {
-      return true;
-    }
-    
-    if (Notification.permission === 'denied') {
+      console.log('🔌 MainSocketClient: Notifications not supported');
       return false;
     }
     
     try {
+      // Request permission
       const permission = await Notification.requestPermission();
-      // If permission was newly granted, set a flag in sessionStorage
-      if (permission === 'granted') {
+      
+      // Check if permission was granted
+      const granted = permission === 'granted';
+      console.log(`🔌 MainSocketClient: Notification permission ${granted ? 'granted' : 'denied'}`);
+      
+      // Set flag in sessionStorage to show welcome notification
+      if (granted) {
         sessionStorage.setItem('notificationPermissionJustGranted', 'true');
       }
-      return permission === 'granted';
+      
+      return granted;
     } catch (error) {
-      console.error('Error requesting notification permission:', error);
+      console.error('🔌 MainSocketClient: Error requesting notification permission:', error);
       return false;
     }
   }
 
   /**
-   * Show a browser notification
+   * Show a notification
    * @param {string} title - Notification title
    * @param {Object} options - Notification options
-   * @returns {Notification|null} Notification object or null
+   * @returns {Notification|null} Notification object or null if not supported
    */
   showNotification(title, options = {}) {
+    // Check if notifications are supported and permission is granted
     if (!this.notificationSupported || Notification.permission !== 'granted') {
       return null;
     }
     
     try {
+      // Create and return the notification
       return new Notification(title, options);
     } catch (error) {
-      console.error('Error showing notification:', error);
+      console.error('🔌 MainSocketClient: Error showing notification:', error);
       return null;
     }
   }
@@ -175,11 +252,8 @@ class MainSocketClient extends BaseSocketClient {
     const isSystemMessage = data.sender === 'System' || data.sender === 'Server';
     
     if (isSystemMessage) {
-      // Still create in-app notification if needed, but only for non-system messages
-      if (!isSystemMessage && callbacks.onFollowedUserMessage) {
-        callbacks.onFollowedUserMessage(data);
-      }
-      return; // Skip the rest of processing for system messages
+      // We don't want notifications for system messages
+      return;
     }
     
     // Get application state
@@ -188,7 +262,7 @@ class MainSocketClient extends BaseSocketClient {
     // Create a unique ID for this notification to prevent duplicates
     const notificationId = `${data.sender}-${data.messageId || data.timestamp}`;
     
-    // Create in-app notification regardless of browser notification permission
+    // Create in-app notification
     if (callbacks.onFollowedUserMessage) {
       callbacks.onFollowedUserMessage(data);
     }
@@ -200,7 +274,7 @@ class MainSocketClient extends BaseSocketClient {
         Notification.permission === 'granted') {
       
       const notificationOptions = {
-        body: data.messagePreview,
+        body: data.messagePreview || data.message || 'New message',
         icon: '/favicon.ico', // Use app icon or default
         tag: notificationId,  // Use the unique ID to prevent duplicates
         requireInteraction: false,

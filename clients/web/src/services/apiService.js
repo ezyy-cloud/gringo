@@ -1,5 +1,6 @@
 import axios from 'axios';
 import socketService from './socketService'; // Import socketService to get socket ID
+import { getStatusFallback, getMessagesFallback, cacheMessages } from '../utils/api-fallbacks';
 
 // Server URL - from environment variables
 const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -9,8 +10,12 @@ const api = axios.create({
   baseURL: SERVER_URL,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  timeout: 10000 // 10 second timeout
 });
+
+// Flag to track if we're in fallback mode
+let isInFallbackMode = false;
 
 // Helper method to get the auth token from localStorage
 const getAuthToken = () => {
@@ -40,29 +45,84 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log('ApiService: Response received success');
+    
+    // If we successfully got a response, we're not in fallback mode
+    isInFallbackMode = false;
+    
     return response;
   },
   (error) => {
     console.error('ApiService: Response error:', error.response?.status, error.response?.data);
     
+    // Handle rate limiting (429) errors
+    if (error.response && error.response.status === 429) {
+      console.warn('ApiService: Rate limited (429 Too Many Requests) - implementing backoff');
+      
+      // Store the time of rate limiting for backoff
+      const now = Date.now();
+      localStorage.setItem('api_rate_limited_at', now.toString());
+      
+      // Don't attempt to reload or redirect, just return a user-friendly error
+      return Promise.reject({
+        response: error.response,
+        message: "You're making too many requests. Please wait a moment before trying again.",
+        isRateLimited: true
+      });
+    }
+    
     // If status is 401 Unauthorized, clear token and redirect to login
     if (error.response && error.response.status === 401) {
       console.log('ApiService: 401 Unauthorized response, clearing token');
-      localStorage.removeItem('token');
-      
-      // Check if we are not already on the login page
-      if (!window.location.pathname.includes('/auth')) {
-        console.log('ApiService: Redirecting to login page');
+      // Only redirect if the error was for an API endpoint, not for socket.io
+      if (!error.config.url.includes('socket.io')) {
+        localStorage.removeItem('token');
         window.location.href = '/auth';
       }
+    }
+    
+    // Network errors indicate server might be unreachable
+    if (error.code === 'ECONNABORTED' || error.message.includes('Network Error')) {
+      console.log('ApiService: Network error - server may be unreachable');
+      isInFallbackMode = true;
     }
     
     return Promise.reject(error);
   }
 );
 
+// A cached version of messages for offline use
+let cachedMessages = null;
+
 // API service methods
 const apiService = {
+  // Check if we're in fallback mode
+  isInFallbackMode: () => isInFallbackMode,
+  
+  // Enable fallback mode manually
+  enableFallbackMode: () => {
+    isInFallbackMode = true;
+    console.log('ApiService: Fallback mode enabled manually');
+  },
+  
+  // Disable fallback mode manually
+  disableFallbackMode: () => {
+    isInFallbackMode = false;
+    console.log('ApiService: Fallback mode disabled manually');
+  },
+  
+  // Check server status - used to determine if we should be in fallback mode
+  checkServerStatus: async () => {
+    try {
+      const response = await api.get('/api/status');
+      isInFallbackMode = false;
+      return response.data;
+    } catch (error) {
+      console.error('ApiService: Error checking server status:', error);
+      isInFallbackMode = true;
+      return getStatusFallback();
+    }
+  },
+
   // Get server status
   getStatus: async () => {
     try {
@@ -80,6 +140,11 @@ const apiService = {
       // Get current socket ID to identify the sender
       const socketId = socketService.getSocketId();
       
+      console.log('ApiService: Sending message via API', {
+        message,
+        username,
+        location
+      });
       
       const response = await api.post('/api/messages', { 
         message,
@@ -87,10 +152,15 @@ const apiService = {
         username, // Include username for display
         location  // Include location data
       });
+      
+      console.log('ApiService: Message sent successfully via API:', response.data);
       return response.data;
     } catch (error) {
-      
-      throw error;
+      console.error('ApiService: Error sending message:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error'
+      };
     }
   },
   
@@ -104,21 +174,72 @@ const apiService = {
         formData.append('location', JSON.stringify(location));
       }
       
-      // Set up a request with FormData (required for file uploads)
+      // Make sure message is included in formData
+      if (!formData.has('message')) {
+        formData.append('message', message);
+      }
+      
+      // Only add username if it's not already in the formData
+      if (!formData.has('username')) {
+        // Get the username from localStorage or parse from token
+        let username = null;
+        try {
+          // Try to get the current user from localStorage
+          const userJson = localStorage.getItem('user');
+          if (userJson) {
+            const user = JSON.parse(userJson);
+            username = user.username;
+            console.log('ApiService: Using username from localStorage:', username);
+          }
+          
+          // If no username found and we have a token, try to get it from there
+          if (!username && token) {
+            // Parse the JWT token to get the username (if included in the payload)
+            const tokenParts = token.split('.');
+            if (tokenParts.length === 3) {
+              const payload = JSON.parse(atob(tokenParts[1]));
+              if (payload.username) {
+                username = payload.username;
+                console.log('ApiService: Using username from token payload:', username);
+              }
+            }
+          }
+          
+          // Add username to the form data if found
+          if (username) {
+            formData.append('username', username);
+            console.log('ApiService: Added username to formData:', username);
+          } else {
+            console.warn('ApiService: No username found for message with image!');
+          }
+        } catch (userError) {
+          console.error('ApiService: Error getting username:', userError);
+        }
+      } else {
+        console.log('ApiService: Username already in formData, using existing value');
+      }
+      
+      console.log('ApiService: Sending message with image via API');
+      
+      // Use axios directly for multipart/form-data
       const response = await axios({
         method: 'post',
         url: `${SERVER_URL}/api/messages/with-image`,
         data: formData,
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
+          'Authorization': token ? `Bearer ${token}` : ''
         }
       });
       
+      console.log('ApiService: Message with image sent successfully:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error sending message with image:', error);
-      throw error;
+      console.error('ApiService: Error sending message with image:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Unknown error'
+      };
     }
   },
   
@@ -341,6 +462,33 @@ const apiService = {
   getMessages: async (minutesWindow = 30) => {
     try {
       console.log('🔍 ApiService.getMessages: Starting to fetch messages from server');
+      
+      // Check for recent rate limiting
+      const rateLimitedAt = parseInt(localStorage.getItem('api_rate_limited_at') || '0');
+      const now = Date.now();
+      const backoffTime = 30000; // 30 seconds backoff after rate limiting
+      
+      if (rateLimitedAt > 0 && now - rateLimitedAt < backoffTime) {
+        console.warn(`🔍 ApiService.getMessages: Recently rate limited, backing off (${Math.round((now - rateLimitedAt)/1000)}s elapsed of ${backoffTime/1000}s backoff)`);
+        
+        // Return cached messages if available
+        if (cachedMessages && cachedMessages.length > 0) {
+          console.log('🔍 ApiService.getMessages: Returning cached messages during backoff');
+          return {
+            success: true,
+            messages: cachedMessages,
+            onlineUsers: {},
+            fromCache: true
+          };
+        }
+        
+        // If no cached messages, return a simple response
+        return {
+          success: false,
+          message: 'Rate limited. Please try again in a few moments.',
+          isRateLimited: true
+        };
+      }
       
       // Get auth token
       const token = localStorage.getItem('token');

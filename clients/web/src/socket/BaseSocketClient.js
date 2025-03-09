@@ -14,6 +14,7 @@ class BaseSocketClient {
     this.heartbeatInterval = null;
     this.reconnectTimeout = null;
     this.currentUsername = null;
+    this.fallbackMode = false;
     
     // Default socket options
     this.socketOptions = {
@@ -32,7 +33,8 @@ class BaseSocketClient {
       DISCONNECTED: 'disconnected',
       CONNECTING: 'connecting',
       CONNECTED: 'connected',
-      RECONNECTING: 'reconnecting'
+      RECONNECTING: 'reconnecting',
+      FALLBACK: 'fallback'
     };
   }
 
@@ -41,10 +43,45 @@ class BaseSocketClient {
    */
   initialize() {
     if (this.socket) {
-      return;
+      console.log('🔌 BaseSocketClient: Socket already initialized, disconnecting first');
+      this.socket.disconnect();
+      this.socket = null;
     }
     
-    this.socket = io(this.serverUrl, this.socketOptions);
+    // Determine if we're using a relative URL (for proxy) or full URL (direct connection)
+    const isRelativeUrl = this.serverUrl === '/' || this.serverUrl === '';
+    const connectionUrl = isRelativeUrl ? window.location.origin : this.serverUrl;
+    
+    console.log(`🔌 BaseSocketClient: Initializing socket connection to: "${connectionUrl}"`);
+    console.log(`🔌 BaseSocketClient: Using ${isRelativeUrl ? 'relative' : 'absolute'} URL mode`);
+    
+    // Configure options based on connection type
+    const socketOptions = {
+      ...this.socketOptions,
+      path: '/socket.io',
+      autoConnect: false,
+    };
+    
+    // For relative URLs (proxy), let the browser handle the connection
+    if (isRelativeUrl) {
+      // When using the proxy through Vite, we need these options
+      socketOptions.transports = ['websocket', 'polling'];
+    } else {
+      // For direct connection, use these additional options
+      socketOptions.transports = ['websocket', 'polling'];
+    }
+    
+    try {
+      // Create the socket instance
+      this.socket = io(connectionUrl, socketOptions);
+      console.log('🔌 BaseSocketClient: Socket instance created successfully');
+      
+      return true;
+    } catch (error) {
+      console.error('🔌 BaseSocketClient: Error initializing socket:', error);
+      this.connectionState = this.CONNECTION_STATES.DISCONNECTED;
+      return false;
+    }
   }
 
   /**
@@ -53,41 +90,86 @@ class BaseSocketClient {
    * @param {string} username - Current username
    */
   connect(callbacks = {}, username = null) {
+    console.log('🔌 BaseSocketClient: Connect called with username:', username);
+    
     // Initialize socket if needed
     if (!this.socket) {
+      console.log('🔌 BaseSocketClient: Socket not initialized, initializing now');
       this.initialize();
     }
     
     if (username) {
+      console.log('🔌 BaseSocketClient: Setting current username:', username);
       this.currentUsername = username;
     }
     
     // Only proceed if we're not already connected or connecting
     if (this.connectionState === this.CONNECTION_STATES.CONNECTED) {
+      console.log('🔌 BaseSocketClient: Already connected, calling onConnect callback');
       if (callbacks.onConnect) callbacks.onConnect();
       
       // Set username if provided, even if already connected
       if (this.currentUsername) {
-        this.socket.emit('setUsername', { username: this.currentUsername });
+        console.log('🔌 BaseSocketClient: Authenticating with server');
+        this.authenticate(this.currentUsername);
       }
       return;
     }
     
     if (this.connectionState === this.CONNECTION_STATES.CONNECTING || 
         this.connectionState === this.CONNECTION_STATES.RECONNECTING) {
+      console.log('🔌 BaseSocketClient: Already connecting or reconnecting, skipping connect');
       return;
     }
     
     // Update state and prepare for connection
+    console.log('🔌 BaseSocketClient: Updating connection state to CONNECTING');
     this.updateConnectionState(this.CONNECTION_STATES.CONNECTING);
     
     // Remove ALL existing listeners to prevent duplicates
+    console.log('🔌 BaseSocketClient: Removing all existing listeners');
     this.socket.removeAllListeners();
     
+    console.log('🔌 BaseSocketClient: Setting up event listeners');
     this.setupEventListeners(callbacks);
     
     // Connect to the server
+    console.log('🔌 BaseSocketClient: Connecting to server:', this.serverUrl);
     this.socket.connect();
+  }
+
+  /**
+   * Authenticate with the server
+   * @param {string} username - Username to authenticate with
+   * @param {string} token - JWT token (if available)
+   */
+  authenticate(username, token = null) {
+    if (!this.socket) {
+      console.error('🔌 BaseSocketClient: Socket not initialized in authenticate');
+      return;
+    }
+
+    // Get token from localStorage if not provided
+    if (!token) {
+      token = localStorage.getItem('token');
+    }
+    
+    console.log('🔌 BaseSocketClient: Authenticating with username:', username);
+    
+    // Save the username for later use
+    this.currentUsername = username;
+    console.log('🔌 BaseSocketClient: Current username set to:', this.currentUsername);
+    
+    // Create the auth payload
+    const authPayload = {
+      username,
+      token
+    };
+    
+    console.log('🔌 BaseSocketClient: Sending authentication payload:', JSON.stringify(authPayload, null, 2));
+    
+    // Send authentication event to server
+    this.socket.emit('authenticate', authPayload);
   }
 
   /**
@@ -95,54 +177,96 @@ class BaseSocketClient {
    * @param {Object} callbacks - Event callbacks
    */
   setupEventListeners(callbacks) {
+    console.log('🔌 BaseSocketClient: Setting up event listeners with callbacks:', Object.keys(callbacks));
+    
     // Connection events
     this.socket.on('connect', () => {
+      console.log('🔌 BaseSocketClient: Socket connected event fired');
       this.updateConnectionState(this.CONNECTION_STATES.CONNECTED);
       
-      // Set username if available
+      // Authenticate if we have a username
       if (this.currentUsername) {
-        this.socket.emit('setUsername', { username: this.currentUsername });
+        console.log('🔌 BaseSocketClient: Authenticating after connect with username:', this.currentUsername);
+        this.authenticate(this.currentUsername);
       }
       
       // Setup heartbeat
+      console.log('🔌 BaseSocketClient: Setting up heartbeat');
       this.setupHeartbeat();
       
       // Process any queued messages
+      console.log('🔌 BaseSocketClient: Processing message queue, count:', this.messageQueue.length);
       this.processMessageQueue();
       
+      console.log('🔌 BaseSocketClient: Calling onConnect callback');
       if (callbacks.onConnect) callbacks.onConnect();
     });
 
     this.socket.on('connect_error', (error) => {
+      console.log('🔌 BaseSocketClient: Socket connect_error event fired', error);
       if (this.connectionState !== this.CONNECTION_STATES.RECONNECTING) {
         this.updateConnectionState(this.CONNECTION_STATES.RECONNECTING);
       }
       
+      console.log('🔌 BaseSocketClient: Calling onConnectError callback');
       if (callbacks.onConnectError) callbacks.onConnectError(error);
     });
 
     this.socket.on('disconnect', (reason) => {
+      console.log('🔌 BaseSocketClient: Socket disconnect event fired, reason:', reason);
+      
       // Clear heartbeat interval
       clearInterval(this.heartbeatInterval);
       
       // Update connection state based on reason
       if (reason === 'io client disconnect' || reason === 'io server disconnect') {
         // Intentional disconnect
+        console.log('🔌 BaseSocketClient: Intentional disconnect detected');
         this.updateConnectionState(this.CONNECTION_STATES.DISCONNECTED);
       } else {
         // Unintentional disconnect, prepare for reconnection
+        console.log('🔌 BaseSocketClient: Unintentional disconnect detected, preparing for reconnect');
         this.updateConnectionState(this.CONNECTION_STATES.RECONNECTING);
         
         // Setup manual reconnect if needed
         clearTimeout(this.reconnectTimeout);
         this.reconnectTimeout = setTimeout(() => {
           if (this.connectionState === this.CONNECTION_STATES.RECONNECTING) {
+            console.log('🔌 BaseSocketClient: Manual reconnect attempt');
             this.socket.connect();
           }
         }, 5000);
       }
       
+      console.log('🔌 BaseSocketClient: Calling onDisconnect callback');
       if (callbacks.onDisconnect) callbacks.onDisconnect(reason);
+    });
+
+    // Authentication response
+    this.socket.on('authenticated', (data) => {
+      console.log('🔌 BaseSocketClient: Authentication response received:', data);
+      
+      if (data.success) {
+        console.log('🔌 BaseSocketClient: Authentication successful');
+        
+        // Store username returned from server
+        if (data.username) {
+          this.currentUsername = data.username;
+          console.log('🔌 BaseSocketClient: Username set from server:', this.currentUsername);
+        }
+        
+        // Call onAuthenticated callback if provided
+        if (callbacks.onAuthenticated) {
+          callbacks.onAuthenticated(data);
+        }
+      } else {
+        console.error('🔌 BaseSocketClient: Authentication failed:', data.error);
+        
+        // Call onAuthenticationFailed callback if provided
+        if (callbacks.onAuthenticationFailed) {
+          callbacks.onAuthenticationFailed(data);
+        }
+      }
     });
   }
 
@@ -182,11 +306,18 @@ class BaseSocketClient {
       _timestamp: Date.now()
     };
     
+    // Add detailed logging right before emission
+    console.log(`🔌 BaseSocketClient: About to emit '${eventName}' event with data:`, JSON.stringify(messageData, null, 2));
+    console.log(`🔌 BaseSocketClient: Username in payload:`, messageData.username);
+    console.log(`🔌 BaseSocketClient: Sender in payload:`, messageData.sender);
+    
     if (this.connectionState === this.CONNECTION_STATES.CONNECTED && this.socket?.connected) {
       // If connected, send directly
+      console.log(`🔌 BaseSocketClient: Directly emitting '${eventName}' event to server`);
       this.socket.emit(eventName, messageData);
     } else {
       // Otherwise queue for later
+      console.log(`🔌 BaseSocketClient: Not connected, queuing '${eventName}' event for later`);
       this.messageQueue.push({
         eventName,
         data: messageData
@@ -205,11 +336,18 @@ class BaseSocketClient {
       return;
     }
     
+    console.log(`🔌 BaseSocketClient: Processing message queue with ${this.messageQueue.length} items`);
+    
     // Process all queued messages
     const queueCopy = [...this.messageQueue];
     this.messageQueue = [];
     
     queueCopy.forEach(item => {
+      console.log(`🔌 BaseSocketClient: Processing queued message with event "${item.eventName}":`);
+      console.log(`🔌 BaseSocketClient: Queued message payload:`, JSON.stringify(item.data, null, 2));
+      console.log(`🔌 BaseSocketClient: Username in queued payload:`, item.data.username);
+      console.log(`🔌 BaseSocketClient: Sender in queued payload:`, item.data.sender);
+      
       this.socket.emit(item.eventName, item.data);
     });
   }
@@ -267,6 +405,45 @@ class BaseSocketClient {
    */
   getSocket() {
     return this.socket;
+  }
+
+  /**
+   * Enable fallback mode for when server is unreachable
+   * This allows the app to function with local-only data
+   */
+  enableFallbackMode() {
+    console.log('🔌 BaseSocketClient: Enabling fallback mode');
+    this.fallbackMode = true;
+    this.updateConnectionState(this.CONNECTION_STATES.FALLBACK);
+    
+    // Clear any existing connection attempts
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    
+    clearInterval(this.heartbeatInterval);
+    clearTimeout(this.reconnectTimeout);
+  }
+
+  /**
+   * Disable fallback mode and attempt normal connection
+   */
+  disableFallbackMode() {
+    console.log('🔌 BaseSocketClient: Disabling fallback mode');
+    this.fallbackMode = false;
+    this.updateConnectionState(this.CONNECTION_STATES.DISCONNECTED);
+    
+    // Socket will be re-initialized on next connect() call
+  }
+
+  /**
+   * Check if currently in fallback mode
+   * @returns {boolean} Fallback mode status
+   */
+  isFallbackMode() {
+    return this.fallbackMode;
   }
 }
 

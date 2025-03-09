@@ -2,7 +2,9 @@
  * Weather Bot Template
  * A bot that provides weather information
  */
-const { logger } = require('../utils');
+const { logger } = require('../../utils');
+const weatherService = require('./weatherService');
+const messageHandler = require('./messageHandler');
 
 module.exports = {
   name: 'Weather Bot',
@@ -25,28 +27,12 @@ module.exports = {
       status: 'active',
       config: botData.config || {},
       
-      /**
-       * Process incoming messages
-       * @param {Object} message - Message to process
-       */
+      // Process incoming messages using the dedicated handler
       processMessage: async (message) => {
-        logger.debug(`Weather bot received message from ${message.sender}`, message);
-        
-        // Check if the message mentions weather
-        if (message.content && message.content.toLowerCase().includes('weather')) {
-          const response = 'The weather is currently sunny with a temperature of 75°F';
-          await bot.sendMessage(response, message.sender);
-        } else {
-          await bot.sendMessage('Ask me about the weather!', message.sender);
-        }
+        return messageHandler.processMessage(message, bot);
       },
       
-      /**
-       * Send a message to a recipient
-       * @param {string} content - Message content
-       * @param {string} recipient - Recipient ID
-       * @returns {Object} - Send result
-       */
+      // Send a message to a recipient
       sendMessage: async (content, recipient) => {
         logger.debug(`Weather bot sending message to ${recipient}`, { content });
         
@@ -59,9 +45,7 @@ module.exports = {
         };
       },
       
-      /**
-       * Shutdown the bot
-       */
+      // Shutdown the bot
       shutdown: async () => {
         logger.info(`Shutting down Weather bot: ${bot._id}`);
         bot.status = 'inactive';

@@ -1,6 +1,14 @@
 /**
  * Bot Server
+ * 
  * Standalone server that manages and communicates with bots
+ * 
+ * Template Structure:
+ * - templates/
+ *   - newsBot/        - News bot implementation
+ *   - weatherBot/     - Weather bot implementation
+ *   - moderatorBot/   - Moderator bot implementation
+ *   - utilities/      - Shared utility functions
  */
 const express = require('express');
 const cors = require('cors');
