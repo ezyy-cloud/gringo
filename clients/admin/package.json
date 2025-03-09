@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npx tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build && node create-redirects.js",
+    "preview": "vite preview",
+    "create-redirects": "node create-redirects.js"
   },
   "keywords": [
     "admin",

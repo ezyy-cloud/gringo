@@ -19,7 +19,7 @@ const logger = {
 };
 
 // Configuration
-const API_URL = process.env.API_URL || 'http://localhost:3000';
+const API_URL = process.env.MAIN_SERVER_URL || 'https://api.gringo.ezyy.cloud';
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
 const USE_MOCK_AUTH = process.env.MOCK_AUTH === 'true';
 const API_KEY = process.env.BOT_API_KEY || process.env.API_KEY;
@@ -115,7 +115,9 @@ async function authenticateBot(botId, apiKey, forceRefresh = false) {
   }
 
   // For development/testing environments, use mock authentication
-  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.MOCK_AUTH === 'true') {
+  // Only use mock auth if explicitly allowed or in development/test mode
+  if ((process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.MOCK_AUTH === 'true') 
+      && process.env.FORCE_REAL_CALLS !== 'true') {
     try {
       console.info('[AuthService] Using mock authentication for development/testing');
       const mockToken = createMockToken(botId);
@@ -135,7 +137,7 @@ async function authenticateBot(botId, apiKey, forceRefresh = false) {
 
   // Production mode - authenticate with the server
   try {
-    console.info(`[AuthService] Authenticating bot ${botId} with server`);
+    console.info(`[AuthService] Authenticating bot ${botId} with server at ${API_URL}`);
     
     const response = await axios.post(`${API_URL}/api/bots/authenticate`, {
       botId,
@@ -152,28 +154,21 @@ async function authenticateBot(botId, apiKey, forceRefresh = false) {
         expiry: Date.now() + expiresIn
       });
       
-      console.info(`[AuthService] Successfully authenticated bot ${botId} with server`);
+      console.info(`[AuthService] Successfully authenticated bot ${botId}`);
       return createResponse(true, token);
     } else {
-      const errorMsg = response.data?.message || 'Unknown authentication error';
+      const errorMsg = response.data?.message || 'Authentication failed';
       console.error(`[AuthService] Server authentication failed: ${errorMsg}`);
       return createResponse(false, null, errorMsg);
     }
   } catch (error) {
-    const errorMsg = error.response?.data?.message || error.message || 'Unknown error during authentication';
-    console.error(`[AuthService] Authentication error:`, errorMsg);
+    const errorMsg = error.response?.data?.message || error.message || 'Server authentication error';
+    console.error(`[AuthService] Error authenticating with server: ${errorMsg}`);
     
-    // In development, fallback to mock authentication as a last resort
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-      console.warn('[AuthService] Falling back to mock authentication after server error');
-      const mockToken = createMockToken(botId);
-      
-      tokenCache.set(botId, {
-        token: mockToken,
-        expiry: Date.now() + MOCK_TOKEN_EXPIRY
-      });
-      
-      return createResponse(true, mockToken);
+    // Log detailed error information for debugging
+    if (error.response) {
+      console.error(`[AuthService] Response status: ${error.response.status}`);
+      console.error(`[AuthService] Response data:`, error.response.data);
     }
     
     return createResponse(false, null, errorMsg);

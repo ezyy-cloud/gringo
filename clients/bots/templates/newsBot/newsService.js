@@ -25,23 +25,54 @@ const newsByCountryCache = {};
 // Cache TTL for country-specific news (30 minutes)
 const COUNTRY_CACHE_TTL = 30 * 60 * 1000;
 
+// Reduce cache expiration time to ensure fresh news
+const CACHE_EXPIRY_TIME = 2 * 60 * 60 * 1000; // 2 hours (down from 24 hours)
+
 // Function to check if a country cache entry is expired
 const isCountryCacheExpired = (cacheKey) => {
-  if (!newsByCountryCache[cacheKey] || !newsByCountryCache[cacheKey].timestamp) {
-    return true;
-  }
-  const now = Date.now();
-  return (now - newsByCountryCache[cacheKey].timestamp) > COUNTRY_CACHE_TTL;
+  if (!newsByCountryCache[cacheKey]) return true;
+  
+  const cacheAge = Date.now() - newsByCountryCache[cacheKey].timestamp;
+  return cacheAge > CACHE_EXPIRY_TIME;
 };
 
 // Function to clean up expired cache entries
 const cleanupExpiredCache = () => {
   const now = Date.now();
-  Object.keys(newsByCountryCache).forEach(key => {
+  let expiredCount = 0;
+  let totalCount = 0;
+  
+  // Get all cache keys
+  const cacheKeys = Object.keys(newsByCountryCache);
+  totalCount = cacheKeys.length;
+  
+  // Remove expired entries
+  cacheKeys.forEach(key => {
     if (isCountryCacheExpired(key)) {
       delete newsByCountryCache[key];
+      expiredCount++;
     }
   });
+  
+  // If we have too many entries, remove oldest ones even if not expired
+  const MAX_CACHE_ENTRIES = 50; // Limit cache size
+  if (Object.keys(newsByCountryCache).length > MAX_CACHE_ENTRIES) {
+    // Sort by timestamp (oldest first)
+    const sortedEntries = Object.entries(newsByCountryCache)
+      .sort(([, a], [, b]) => a.timestamp - b.timestamp);
+    
+    // Remove oldest entries until we're under the limit
+    const entriesToRemove = sortedEntries.length - MAX_CACHE_ENTRIES;
+    for (let i = 0; i < entriesToRemove; i++) {
+      const [key] = sortedEntries[i];
+      delete newsByCountryCache[key];
+      expiredCount++;
+    }
+  }
+  
+  if (expiredCount > 0) {
+    logger.info(`Cleaned up ${expiredCount}/${totalCount} cache entries`);
+  }
 };
 
 // Run cache cleanup every 15 minutes
@@ -242,48 +273,79 @@ async function processNewsUpdate(bot) {
  * @returns {Array} - Array of news items
  */
 async function getNewsForCountry(countryCode, config) {
-  try {
-    logger.info(`Fetching news for country: ${countryCode}`);
+  const cacheKey = `${countryCode}_${config.language || 'en'}_${config.category || 'general'}`;
+  
+  // Check if we've already hit rate limits today
+  const today = new Date().toISOString().split('T')[0];
+  const rateLimitKey = `rateLimit_${today}`;
+  const currentUsage = global[rateLimitKey] || 0;
+  
+  // Calculate how many credits we should have left for the day
+  const now = new Date();
+  const hoursElapsed = now.getHours() + (now.getMinutes() / 60);
+  const dayProgress = hoursElapsed / 24; // 0 to 1 representing progress through the day
+  const targetUsage = Math.floor(200 * dayProgress);
+  const safetyBuffer = 10; // Keep some credits in reserve
+  
+  // Only use cache if we're significantly ahead of our target usage
+  const shouldUseCache = currentUsage > targetUsage + safetyBuffer;
+  
+  if (shouldUseCache && newsByCountryCache[cacheKey] && !isCountryCacheExpired(cacheKey)) {
+    logger.info(`Using cached news data for ${countryCode} (ahead of target usage)`);
+    return newsByCountryCache[cacheKey].items || [];
+  }
+  
+  // If we're near the daily limit, use cache even if expired
+  if (currentUsage >= 190) {
+    logger.warn(`Near daily limit (${currentUsage}/200). Using any available cached data.`);
     
-    // Create a unique cache key based on essential parameters
-    const cacheKey = `news_${countryCode}_${config.language || 'en'}`;
-    
-    // Check if we have this country in cache and it's not expired
-    if (newsByCountryCache[cacheKey] && !isCountryCacheExpired(cacheKey)) {
-      logger.info(`Using cached news data for ${countryCode}`);
-      return newsByCountryCache[cacheKey].items || [];
+    if (newsByCountryCache[cacheKey] && newsByCountryCache[cacheKey].items) {
+      logger.info(`Using cached news data for ${countryCode} to preserve remaining credits`);
+      return newsByCountryCache[cacheKey].items;
     }
     
-    // Prepare API request parameters - keeping it minimal to avoid 422 errors
-    // Using only essential parameters documented in the API reference
-    const params = {
-      // Required parameter
-      apikey: process.env.NEWSDATA_API_KEY || config.newsApiKey || 'pub_73415c925b1126c7d5fe25c53b7a0e1bebad0',
-      
-      // Geographic filtering - API only allows max 5 countries
-      country: countryCode, // Using single country in this function
-      
-      // Content filtering - only essential parameters
-      language: config.language || 'en',
-      
-      // Always require images since we're not supporting text-only posts
-      image: 1
-    };
+    logger.warn(`No cached data available for ${countryCode}. Skipping to preserve credits.`);
+    return [];
+  }
+  
+  // Prepare API request parameters - keeping it minimal to avoid 422 errors
+  const params = {
+    // Required parameter
+    apikey: process.env.NEWSDATA_API_KEY || config.newsApiKey || 'pub_73415c925b1126c7d5fe25c53b7a0e1bebad0',
     
-    // Add minimal additional parameters that are likely needed
-    if (config.size) params.size = config.size;
-    if (config.category) params.category = config.category;
+    // Geographic filtering
+    country: countryCode,
     
-    logger.info(`Making API request with params: ${JSON.stringify(params)}`);
+    // Content filtering
+    language: config.language || 'en',
     
-    // Make the API request with error handling and retries
+    // Always require images
+    image: 1,
+    
+    // Prioritize breaking news
+    category: config.category || 'top',
+    
+    // Limit results to conserve credits
+    size: config.size || 3
+  };
+  
+  logger.info(`Making API request with params: ${JSON.stringify(params)}`);
+  
+  try {
+    // Make the API request with enhanced error handling and retries
     const response = await apiUtils.makeRequest({
       url: NEWSDATA_API_URL,
       method: 'GET',
       params,
-      maxRetries: 3,
-      retryDelay: 1000
+      maxRetries: 2, // Reduced retries to avoid wasting credits
+      retryDelay: 15000 // 15 second delay between retries
     });
+    
+    // Track API usage
+    if (!global[rateLimitKey]) global[rateLimitKey] = 0;
+    global[rateLimitKey]++;
+    
+    logger.info(`API usage today: ${global[rateLimitKey]}/200 credits`);
     
     // Check for successful response
     if (!response.data) {
@@ -297,101 +359,41 @@ async function getNewsForCountry(countryCode, config) {
       return [];
     }
     
-    // Check for results
-    if (!response.data.results || !Array.isArray(response.data.results)) {
-      logger.error('Invalid results in API response', response.data);
-      return [];
-    }
+    // Process and cache the results
+    const results = response.data.results || [];
     
-    const newsItems = response.data.results;
-    
-    // Store the next page token if available for pagination
-    if (response.data.nextPage) {
-      logger.info(`Next page token available: ${response.data.nextPage}`);
-      // Store this for potential pagination
-    }
-    
-    // Filter for news items with valid image URLs
-    const validItems = newsItems.filter(item => {
-      // Basic required fields
-      const hasRequiredFields = item.title && item.description;
-      if (!hasRequiredFields) return false;
-      
-      // Image validation
-      if (config.image === 1) {
-        // If image parameter is specified, ensure we have a valid image URL
-        let validImage = false;
-        
-        if (item.image_url) {
-          if (typeof item.image_url === 'string' && item.image_url.startsWith('http')) {
-            // Check for common image extensions
-            const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-            const hasImageExtension = imageExtensions.some(ext => 
-              item.image_url.toLowerCase().includes(ext)
-            );
-            
-            validImage = hasImageExtension;
-          } else if (typeof item.image_url === 'object' && item.image_url.url) {
-            // If image_url is an object with a url property, check that URL
-            validImage = item.image_url.url.startsWith('http');
-          }
-        }
-        
-        if (!validImage) {
-          logger.debug(`Filtering out news item with invalid image URL: ${item.title.substring(0, 30)}...`);
-          return false;
-        }
-      }
-      
-      return true;
-    });
-    
-    logger.info(`Found ${validItems.length} valid news items out of ${newsItems.length} total`);
-    
-    // Process each item to ensure proper structure
-    const processedItems = validItems.map(item => {
-      // Validate image URL
-      let imageUrl = null;
-      if (item.image_url) {
-        if (typeof item.image_url === 'string' && item.image_url.startsWith('http')) {
-          imageUrl = item.image_url;
-        } else if (typeof item.image_url === 'object' && item.image_url.url) {
-          imageUrl = item.image_url.url;
-        }
-      }
-      
-      return {
-        article_id: item.article_id || `news_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
-        title: item.title,
-        description: item.description || item.content || 'No description available',
-        content: item.content,
-        link: item.link,
-        pubDate: item.pubDate,
-        image_url: imageUrl,
-        source_id: item.source_id,
-        source_name: item.source_name,
-        country: Array.isArray(item.country) ? item.country[0] : item.country,
-        category: Array.isArray(item.category) ? item.category[0] : item.category,
-        language: item.language,
-        keywords: item.keywords,
-        creator: item.creator,
-        video_url: item.video_url,
-        // Store any AI-related fields if available (for Professional/Corporate users)
-        sentiment: item.sentiment,
-        ai_tag: item.ai_tag,
-        ai_region: item.ai_region
-      };
-    });
-    
-    // Create a new cache for this country
+    // Cache the results
     newsByCountryCache[cacheKey] = {
-      items: processedItems,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      items: results
     };
     
-    return processedItems;
+    logger.info(`Got ${results.length} news items for country ${countryCode}`);
+    return results;
   } catch (error) {
-    logger.error(`Error fetching news for country ${countryCode}:`, error);
+    logger.error(`Error fetching news for country ${countryCode}: ${JSON.stringify(error)}`);
+    
+    // If we get a rate limit error, track it
+    if (error.response && error.response.status === 429) {
+      logger.warn(`Rate limit exceeded for NewsData API. Waiting before next request.`);
+      
+      // Mark that we've hit the rate limit
+      if (!global[rateLimitKey]) global[rateLimitKey] = 180; // Set to near limit
+      
+      // Add a longer delay after a rate limit error
+      await new Promise(resolve => setTimeout(resolve, 60000)); // 1 minute delay
+    } else {
+      // Add a delay after an error
+      logger.info(`Waiting 15 seconds before fetching news for next country...`);
+      await new Promise(resolve => setTimeout(resolve, 15000));
+    }
+    
+    // If we have cached data, use it as fallback after API error
+    if (newsByCountryCache[cacheKey] && newsByCountryCache[cacheKey].items) {
+      logger.info(`Using cached news data for ${countryCode} after API error`);
+      return newsByCountryCache[cacheKey].items;
+    }
+    
     return [];
   }
 }
@@ -524,11 +526,41 @@ async function getNews(config) {
   try {
     logger.info('Getting news from multiple countries');
     
-    // Limit the number of countries to process at once to avoid rate limiting
-    const maxCountriesPerBatch = config.maxCountriesPerBatch || 3; // Default to 3 countries per batch
+    // Get the current usage and target
+    const today = new Date().toISOString().split('T')[0];
+    const rateLimitKey = `rateLimit_${today}`;
+    const currentUsage = global[rateLimitKey] || 0;
+    
+    // Calculate how many countries we can safely process
+    // We want to ensure even distribution throughout the day
+    const now = new Date();
+    const hoursElapsed = now.getHours() + (now.getMinutes() / 60);
+    const dayProgress = hoursElapsed / 24; // 0 to 1 representing progress through the day
+    const targetUsage = Math.floor(200 * dayProgress);
+    
+    // Determine how many countries to process based on our position relative to target
+    let countriesToProcess = 1; // Default to 1 country
+    
+    if (currentUsage < targetUsage - 10) {
+      // We're behind schedule, process more countries
+      countriesToProcess = Math.min(3, Math.floor((targetUsage - currentUsage) / 3));
+      logger.info(`Behind target usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} countries`);
+    } else if (currentUsage > targetUsage + 10) {
+      // We're ahead of schedule, be more conservative
+      countriesToProcess = 1;
+      logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), processing only ${countriesToProcess} country`);
+    } else {
+      logger.info(`On target with usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} country`);
+    }
+    
+    // If we're near the daily limit, don't process any countries
+    if (currentUsage >= 190) {
+      logger.warn(`Near daily limit (${currentUsage}/200). Skipping news update.`);
+      return [];
+    }
     
     // Get the next batch of countries using our country rotation utility
-    const countryString = countryUtils.getNextCountryBatch(maxCountriesPerBatch);
+    const countryString = countryUtils.getNextCountryBatch(countriesToProcess);
     const countries = countryString.split(',');
     
     logger.info(`Using countries for this fetch: ${countryString} (${countries.length} countries)`);
@@ -536,19 +568,22 @@ async function getNews(config) {
     
     let allNewsItems = [];
     
-    // Process countries sequentially instead of in parallel to avoid rate limiting
+    // Process countries sequentially to avoid rate limiting
     for (const country of countries) {
       try {
         // Add a delay between requests to respect rate limits
         if (countries.indexOf(country) > 0) {
-          logger.info(`Waiting 2 seconds before fetching news for next country to avoid rate limiting...`);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+          const delaySeconds = 10;
+          logger.info(`Waiting ${delaySeconds} seconds before fetching news for next country...`);
+          await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
         }
         
+        // Prioritize breaking news
         const countryItems = await getNewsForCountry(country.trim(), { 
           ...config,
-          // Force image parameter to ensure we only get news with images
-          image: 1
+          image: 1,
+          size: 3,
+          category: 'top' // Focus on top/breaking news
         });
         
         if (Array.isArray(countryItems)) {
@@ -556,7 +591,10 @@ async function getNews(config) {
         }
       } catch (error) {
         logger.error(`Error fetching news for country ${country}, continuing with next country: ${error.message}`);
-        // Continue with next country even if one fails
+        
+        // Add delay after an error
+        logger.info(`Adding delay after error before continuing...`);
+        await new Promise(resolve => setTimeout(resolve, 15000));
       }
     }
     
@@ -564,6 +602,14 @@ async function getNews(config) {
     const uniqueItems = [];
     const titleMap = new Map();
     
+    // Sort by newest first to prioritize breaking news
+    allNewsItems.sort((a, b) => {
+      const dateA = a.pubDate ? new Date(a.pubDate) : new Date(0);
+      const dateB = b.pubDate ? new Date(b.pubDate) : new Date(0);
+      return dateB - dateA; // Newest first
+    });
+    
+    // Filter for unique items
     allNewsItems.forEach(item => {
       if (!titleMap.has(item.title)) {
         titleMap.set(item.title, true);

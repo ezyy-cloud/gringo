@@ -42,7 +42,7 @@ const makeRequest = async (options) => {
         params,
         data,
         headers,
-        timeout: 10000 // 10 second timeout
+        timeout: 15000 // 15 second timeout
       });
       
       return response;
@@ -51,9 +51,10 @@ const makeRequest = async (options) => {
       
       // Special handling for rate limiting (429)
       if (error.response && error.response.status === 429) {
+        // Get retry-after header or use a longer default (30 seconds)
         const retryAfter = error.response.headers['retry-after'] 
           ? parseInt(error.response.headers['retry-after'], 10) * 1000 
-          : 5000; // Default to 5 seconds if no Retry-After header
+          : 30000; // Default to 30 seconds if no Retry-After header
         
         console.log(`Rate limit exceeded (429). Waiting ${retryAfter/1000} seconds before retry ${attempts}/${maxRetries}`);
         
@@ -61,6 +62,13 @@ const makeRequest = async (options) => {
         if (attempts <= maxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryAfter));
           continue;
+        } else {
+          // If we've exhausted retries for rate limiting, throw a specific error
+          throw {
+            message: "Rate limit exceeded and max retries reached",
+            status: 429,
+            originalError: error
+          };
         }
       }
       // Check if we should retry other errors

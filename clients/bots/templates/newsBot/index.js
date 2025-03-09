@@ -174,9 +174,9 @@ module.exports = {
               const errorMsg = auth?.error || 'Unknown authentication error';
               logger.error(`Authentication failed: ${errorMsg}`);
               
-              // In non-production environments, create mock token as fallback
-              if (process.env.NODE_ENV !== 'production') {
-                logger.info('Development mode: Creating fallback token');
+              // Only create fallback token if explicitly allowed
+              if (process.env.NODE_ENV !== 'production' || process.env.MOCK_AUTH === 'true') {
+                logger.info('Creating fallback token in non-production mode');
                 bot.authToken = `fallback_token_${Date.now()}`;
                 return true;
               }
@@ -186,9 +186,9 @@ module.exports = {
           } catch (serviceError) {
             logger.error(`Auth service error: ${serviceError?.message || 'Unknown error'}`);
             
-            // In non-production environments, create mock token as fallback
-            if (process.env.NODE_ENV !== 'production') {
-              logger.info('Development mode: Creating emergency token after service error');
+            // Only create emergency token if explicitly allowed
+            if (process.env.NODE_ENV !== 'production' || process.env.MOCK_AUTH === 'true') {
+              logger.info('Creating emergency token after service error in non-production mode');
               bot.authToken = `emergency_token_${Date.now()}`;
               return true;
             }
@@ -199,9 +199,9 @@ module.exports = {
           const errorMsg = error?.message || 'Unknown error';
           logger.error(`Authentication error: ${errorMsg}`);
           
-          // In non-production environments, create mock token as fallback
-          if (process.env.NODE_ENV !== 'production') {
-            logger.info('Development mode: Creating emergency token after error');
+          // Only create emergency token if explicitly allowed
+          if (process.env.NODE_ENV !== 'production' || process.env.MOCK_AUTH === 'true') {
+            logger.info('Creating emergency token after error in non-production mode');
             bot.authToken = `emergency_token_${Date.now()}`;
             return true;
           }
@@ -425,28 +425,100 @@ module.exports = {
     
     // Set up scheduling for automatic news updates
     if (bot.config.postFrequency > 0) {
-      const baseIntervalMs = bot.config.postFrequency * 60 * 1000; // Convert minutes to milliseconds
-      logger.info(`Setting up scheduled task to check for news every ${bot.config.postFrequency} minutes (plus any backoff)`);
+      // Calculate optimal interval for 24-hour coverage with 200 daily credits
+      // 200 credits / 24 hours = 8.33 requests per hour
+      // 60 minutes / 8.33 = 7.2 minutes between requests
+      const optimalIntervalMinutes = 7.2;
       
-      // Run an initial news update after a short delay
-      setTimeout(() => {
-        logger.info(`Running initial news update for ${bot.username}`);
-        bot.processNewsUpdate().catch(error => {
-          logger.error(`Error during initial news update: ${error.message}`);
-        });
-      }, 5000); // 5 second delay
+      // Use the optimal interval regardless of configured frequency to ensure 24-hour coverage
+      const baseIntervalMs = Math.ceil(optimalIntervalMinutes * 60 * 1000); // Convert minutes to milliseconds
       
-      // Use a more sophisticated scheduling approach with dynamic intervals
+      logger.info(`Setting up scheduled task to check for news every ${optimalIntervalMinutes.toFixed(1)} minutes for 24-hour coverage`);
+      
+      // Track daily usage to ensure even distribution
+      const getDailyUsageTarget = () => {
+        const now = new Date();
+        const hoursElapsed = now.getHours() + (now.getMinutes() / 60);
+        const dayProgress = hoursElapsed / 24; // 0 to 1 representing progress through the day
+        
+        // Calculate how many requests we should have made by now for even distribution
+        return Math.floor(200 * dayProgress);
+      };
+      
+      // Perform initial news fetch immediately on startup
+      logger.info('Performing initial news fetch on startup...');
+      bot.processNewsUpdate().then(result => {
+        if (result.success) {
+          logger.info('Initial news fetch completed successfully');
+        } else {
+          logger.warn(`Initial news fetch failed: ${result.error || 'Unknown error'}`);
+        }
+      }).catch(error => {
+        logger.error(`Error during initial news fetch: ${error.message}`);
+      });
+
       const scheduleNextRun = () => {
-        // Calculate next interval based on base interval plus any current backoff
-        const nextInterval = baseIntervalMs + currentBackoff;
-        logger.info(`Scheduling next news update in ${nextInterval/1000}s (base: ${baseIntervalMs/1000}s, backoff: ${currentBackoff/1000}s)`);
+        // Get current usage and target
+        const today = new Date().toISOString().split('T')[0];
+        const rateLimitKey = `rateLimit_${today}`;
+        const currentUsage = global[rateLimitKey] || 0;
+        const targetUsage = getDailyUsageTarget();
+        
+        // Adjust interval based on usage vs target
+        let nextInterval = baseIntervalMs;
+        
+        if (currentUsage > targetUsage + 5) {
+          // We're ahead of schedule, slow down
+          const slowdownFactor = 1 + ((currentUsage - targetUsage) / 20);
+          nextInterval = baseIntervalMs * slowdownFactor;
+          logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), slowing down by factor of ${slowdownFactor.toFixed(2)}`);
+        } else if (currentUsage < targetUsage - 5 && currentUsage < 180) {
+          // We're behind schedule, speed up (but don't exceed 90% of daily limit)
+          const speedupFactor = Math.max(0.5, 1 - ((targetUsage - currentUsage) / 40));
+          nextInterval = baseIntervalMs * speedupFactor;
+          logger.info(`Behind target usage (${currentUsage}/${targetUsage}), speeding up by factor of ${speedupFactor.toFixed(2)}`);
+        }
+        
+        // Ensure minimum interval of 3 minutes to avoid overwhelming the API
+        nextInterval = Math.max(nextInterval, 3 * 60 * 1000);
+        
+        // Ensure we don't exceed daily limit
+        if (currentUsage >= 195) {
+          // Near daily limit, wait until tomorrow
+          const now = new Date();
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(0, 5, 0, 0); // 12:05 AM tomorrow
+          
+          nextInterval = tomorrow.getTime() - now.getTime();
+          logger.warn(`Daily limit nearly reached (${currentUsage}/200). Waiting until tomorrow.`);
+        }
+        
+        logger.info(`Scheduling next news update in ${(nextInterval/60000).toFixed(1)} minutes`);
         
         // Schedule the next run
         bot.newsUpdateTimeoutId = setTimeout(async () => {
           try {
-            logger.info(`Running scheduled news update for ${bot.username}`);
-            await bot.processNewsUpdate();
+            // Check if we've hit rate limits today
+            const today = new Date().toISOString().split('T')[0];
+            const rateLimitKey = `rateLimit_${today}`;
+            const currentUsage = global[rateLimitKey] || 0;
+            
+            if (currentUsage >= 195) {
+              logger.warn(`Daily limit reached (${currentUsage}/200). Skipping news update.`);
+            } else {
+              logger.info(`Running scheduled news update for ${bot.username}`);
+              const result = await bot.processNewsUpdate();
+              
+              // Log the result
+              if (!result.success) {
+                logger.error(`News update failed: ${result.error || 'Unknown error'}`);
+              } else if (result.rateLimited) {
+                logger.warn(`News update encountered rate limiting`);
+              } else {
+                logger.info(`News update completed successfully`);
+              }
+            }
           } catch (error) {
             logger.error(`Error during scheduled news update: ${error.message}`);
           } finally {
