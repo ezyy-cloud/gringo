@@ -49,8 +49,22 @@ const makeRequest = async (options) => {
     } catch (error) {
       attempts++;
       
-      // Check if we should retry
-      if (attempts <= maxRetries && shouldRetry(error)) {
+      // Special handling for rate limiting (429)
+      if (error.response && error.response.status === 429) {
+        const retryAfter = error.response.headers['retry-after'] 
+          ? parseInt(error.response.headers['retry-after'], 10) * 1000 
+          : 5000; // Default to 5 seconds if no Retry-After header
+        
+        console.log(`Rate limit exceeded (429). Waiting ${retryAfter/1000} seconds before retry ${attempts}/${maxRetries}`);
+        
+        // If this is our last attempt, don't wait just to fail
+        if (attempts <= maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryAfter));
+          continue;
+        }
+      }
+      // Check if we should retry other errors
+      else if (attempts <= maxRetries && shouldRetry(error)) {
         console.log(`API request failed (attempt ${attempts}/${maxRetries}): ${error.message}`);
         
         // Wait before retrying with exponential backoff
