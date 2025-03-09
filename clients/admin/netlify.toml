@@ -3,7 +3,7 @@
   command = "npm install && npm run build"
 
 [build.environment]
-  NODE_ENV = "development"
+  NODE_ENV = "production"
 
 [[redirects]]
   from = "/api/*"
