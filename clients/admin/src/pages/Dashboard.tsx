@@ -13,6 +13,8 @@ import ReactMapGL, { NavigationControl, MapRef, Marker, Popup, ScaleControl } fr
 import 'mapbox-gl/dist/mapbox-gl.css';
 import StatCard from '../components/StatCard';
 import { getDashboardStats } from '../services/api';
+import { useTheme } from '@mui/material/styles';
+import '../styles/MapStyles.css';
 
 // Mapbox access token - use environment variable if available
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiZGFya25pZ2h0MDA3IiwiYSI6ImNqOXpiMWF3MjhuajEyeHFzcjhzdDVzN20ifQ.DlcipLyUIsK1pVHRtPK9Mw';
@@ -84,6 +86,9 @@ const Dashboard: React.FC = () => {
   const [geoJsonData, setGeoJsonData] = useState<GeoJSONData | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<GeoJSONFeature | null>(null);
   const mapRef = React.useRef<MapRef>(null);
+  
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   
   // Initial viewport settings
   const [viewport, setViewport] = useState({
@@ -303,111 +308,73 @@ const Dashboard: React.FC = () => {
 
         {/* Messages Map */}
         <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
+          <Paper 
+            sx={{ 
+              p: 2, 
+              height: '600px',
+              position: 'relative',
+              backgroundColor: theme.palette.background.paper,
+              overflow: 'hidden',
+              '& .mapboxgl-map': {
+                borderRadius: 1
+              }
+            }}
+          >
             <Typography variant="h6" gutterBottom>
               Message Locations
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Individual messages plotted on the map
-            </Typography>
-            {geoJsonData && geoJsonData.features && geoJsonData.features.length > 0 ? (
-              <Box sx={{ height: 500, position: 'relative' }}>
-                <ReactMapGL
-                  ref={mapRef}
-                  {...viewport}
-                  onMove={evt => setViewport(evt.viewState)}
-                  mapStyle="mapbox://styles/mapbox/dark-v10"
-                  mapboxAccessToken={MAPBOX_TOKEN}
-                  style={{ width: '100%', height: '100%' }}
-                  attributionControl={true}
-                  reuseMaps
-                >
-                  <NavigationControl position="top-right" />
-                  <ScaleControl position="bottom-right" />
-                  
-                  {/* Render individual message markers */}
-                  {geoJsonData.features.map((feature, index) => (
-                    feature.geometry && (
-                      <Marker 
-                        key={`message-${index}`}
-                        longitude={feature.geometry.coordinates[0]} 
-                        latitude={feature.geometry.coordinates[1]}
-                      >
-                        <IconButton 
-                          size="small" 
-                          onClick={() => setSelectedLocation(feature)}
-                          sx={{ 
-                            color: 'primary.main', 
-                            backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                            '&:hover': {
-                              backgroundColor: 'rgba(255, 255, 255, 1)'
-                            },
-                            width: 24,
-                            height: 24,
-                            padding: 0
-                          }}
-                        >
-                          <MessageIcon fontSize="small" />
-                        </IconButton>
-                      </Marker>
-                    )
-                  ))}
-                  
-                  {/* Popup for selected message */}
-                  {selectedLocation && (
-                    <Popup
-                      longitude={selectedLocation.geometry.coordinates[0]}
-                      latitude={selectedLocation.geometry.coordinates[1]}
-                      anchor="bottom"
-                      onClose={() => setSelectedLocation(null)}
-                      closeButton={true}
-                      closeOnClick={false}
-                      style={{ zIndex: 10 }}
-                    >
-                      <Box sx={{ p: 1, maxWidth: 250 }}>
-                        <Typography variant="subtitle2">
-                          {selectedLocation.properties.name}
-                        </Typography>
-                        {selectedLocation.properties.text && (
-                          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-                            "{selectedLocation.properties.text}"
-                          </Typography>
-                        )}
-                      </Box>
-                    </Popup>
-                  )}
-                </ReactMapGL>
+            <Box className={`admin-map-container ${isDarkMode ? 'dark' : ''}`}>
+              <ReactMapGL
+                {...viewport}
+                onMove={evt => setViewport(evt.viewState)}
+                mapStyle={isDarkMode ? 
+                  'mapbox://styles/mapbox/dark-v11' : 
+                  'mapbox://styles/mapbox/light-v11'
+                }
+                mapboxAccessToken={MAPBOX_TOKEN}
+                ref={mapRef}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <NavigationControl position="top-right" />
+                <ScaleControl position="bottom-right" />
                 
-                {/* Map legend */}
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 16,
-                    left: 16,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    padding: 1,
-                    borderRadius: 1,
-                    color: 'white',
-                    zIndex: 1
-                  }}
-                >
-                  <Typography variant="caption">Message Map</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                    <MessageIcon fontSize="small" sx={{ mr: 1 }} />
-                    <Typography variant="caption">
-                      Each icon represents a single message
-                    </Typography>
-                  </Box>
-                  <Typography variant="caption" sx={{ mt: 0.5, display: 'block' }}>
-                    Total messages on map: {geoJsonData.features.length}
-                  </Typography>
-                </Box>
-              </Box>
-            ) : (
-              <Box sx={{ p: 3, textAlign: 'center' }}>
-                <Typography color="text.secondary">No message location data available</Typography>
-              </Box>
-            )}
+                {geoJsonData?.features.map((location: GeoJSONFeature) => (
+                  <Marker
+                    key={`${location.geometry.coordinates[0]}-${location.geometry.coordinates[1]}`}
+                    longitude={location.geometry.coordinates[0]}
+                    latitude={location.geometry.coordinates[1]}
+                    anchor="bottom"
+                  >
+                    <div
+                      className="map-marker"
+                      onClick={() => setSelectedLocation(location)}
+                    />
+                  </Marker>
+                ))}
+
+                {selectedLocation && (
+                  <Popup
+                    longitude={selectedLocation.geometry.coordinates[0]}
+                    latitude={selectedLocation.geometry.coordinates[1]}
+                    anchor="bottom"
+                    onClose={() => setSelectedLocation(null)}
+                    closeOnClick={false}
+                  >
+                    <div className="location-popup">
+                      <div className="location-popup-header">
+                        {selectedLocation.properties.name}
+                      </div>
+                      <div className="location-popup-content">
+                        {selectedLocation.properties.description}
+                      </div>
+                      <div className="location-popup-stats">
+                        Messages: {selectedLocation.properties.count}
+                      </div>
+                    </div>
+                  </Popup>
+                )}
+              </ReactMapGL>
+            </Box>
           </Paper>
         </Grid>
       </Grid>

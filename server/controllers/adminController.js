@@ -105,9 +105,9 @@ exports.getDashboardStats = async (req, res) => {
             name: { 
               $concat: [
                 "Message ", 
-                { $substr: [{ $toString: "$messageId" }, 0, 8] },
+                { $substrCP: [{ $toString: "$messageId" }, 0, 8] },
                 " - ",
-                { $substr: ["$text", 0, 20] }
+                { $substrCP: ["$text", 0, 20] }
               ]
             },
             count: { $literal: 1 },
@@ -115,7 +115,7 @@ exports.getDashboardStats = async (req, res) => {
               "$location.longitude", 
               "$location.latitude"
             ],
-            text: { $substr: ["$text", 0, 50] },
+            text: { $substrCP: ["$text", 0, 50] },
             messageId: 1
           }
         },
