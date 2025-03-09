@@ -98,46 +98,41 @@ function setRateLimited(retryAfterHeader) {
  */
 async function postNewsWithImage(bot, newsItem, imageUrl) {
   let tempFilePath = null;
-  let retryCount = 0;
-  const maxRetries = 2;
-  
-  // Check if we're currently rate limited
-  if (isRateLimited()) {
-    return { 
-      success: false, 
-      error: 'Rate limited, try again later', 
-      rateLimited: true,
-      retryAfter: Math.ceil((rateLimitState.retryAfter - (Date.now() - rateLimitState.lastRateLimitTime)) / 1000)
-    };
-  }
+  // Define apiUrl at the beginning of the function so it's available in all scopes
+  const apiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
   
   try {
-    logger.info(`Posting news with image: ${imageUrl}`);
+    // Validate inputs
+    if (!bot) {
+      throw new Error('Invalid bot instance');
+    }
     
-    // Validate image URL
-    if (!imageUrl) {
-      logger.info(`No image URL provided for news item: ${newsItem.title || 'untitled'} - skipping`);
+    if (!newsItem) {
+      throw new Error('Invalid news item');
+    }
+    
+    if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+      throw new Error('Invalid image URL');
+    }
+    
+    // Check if we're currently rate limited
+    if (isRateLimited()) {
       return { 
         success: false, 
-        error: 'No image URL provided', 
-        skipped: true 
+        error: 'Rate limited, please try again later',
+        rateLimited: true,
+        retryAfter: Math.ceil(rateLimitState.retryAfter / 1000)
       };
     }
     
-    // 1. Download the image to a temporary file
-    try {
-      tempFilePath = await downloadImage(imageUrl);
-    } catch (downloadError) {
-      logger.error(`Error downloading image: ${downloadError.message}`);
-      // Skip this news item entirely since we only want to post with images
-      return { 
-        success: false, 
-        error: `Image download failed: ${downloadError.message}`, 
-        skipped: true 
-      };
-    }
+    // Download the image
+    logger.info(`Downloading image: ${imageUrl}`);
+    tempFilePath = await downloadImage(imageUrl);
     
-    // 2. Post to API with image
+    // Set up retry mechanism
+    const maxRetries = 1;
+    let retryCount = 0;
+    
     while (retryCount <= maxRetries) {
       try {
         if (!tempFilePath) {
@@ -170,7 +165,6 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
         logger.info('Using bot.authToken for authentication');
         
         // Make the API request
-        const apiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
         logger.info(`Sending post request to: ${apiUrl}`);
         logger.info(`Request headers: Auth=${tokenToUse ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
         
