@@ -211,7 +211,7 @@ module.exports = {
       },
       
       // Process news update on schedule
-      processNewsUpdate: async () => {
+      processNewsUpdate: async (isStartup = false) => {
         try {
           // Skip updates if current backoff is high (severe rate limiting)
           if (currentBackoff > 5 * 60 * 1000) { // Skip if backoff is > 5 minutes
@@ -221,7 +221,7 @@ module.exports = {
           
           // Run the bot
           logger.info(`Processing news update for ${bot.username}`);
-          const result = await bot.run();
+          const result = await bot.run(isStartup);
           
           // If we got rate limited during the run, schedule the next run with increased delay
           if (result.rateLimited) {
@@ -309,12 +309,12 @@ module.exports = {
       },
 
       // Main run function for the bot
-      run: async () => {
+      run: async (isStartup = false) => {
         try {
           logger.info('News bot run starting');
           
           // 1. Fetch news from service
-          const newsItems = await newsService.getNews(bot.config);
+          const newsItems = await newsService.getNews(bot.config, isStartup);
           logger.info(`Fetched ${newsItems.length} news items`);
           
           // Filter out items without images FIRST
@@ -447,7 +447,7 @@ module.exports = {
       
       // Perform initial news fetch immediately on startup
       logger.info('Performing initial news fetch on startup...');
-      bot.processNewsUpdate().then(result => {
+      bot.processNewsUpdate(true).then(result => {
         if (result.success) {
           logger.info('Initial news fetch completed successfully');
         } else {
@@ -456,6 +456,11 @@ module.exports = {
       }).catch(error => {
         logger.error(`Error during initial news fetch: ${error.message}`);
       });
+
+      // Add a longer delay before first scheduled run to avoid rate limits
+      setTimeout(() => {
+        scheduleNextRun();
+      }, 2 * 60 * 1000); // Wait 2 minutes before starting regular schedule
 
       const scheduleNextRun = () => {
         // Get current usage and target

@@ -1,9 +1,9 @@
 [build]
   publish = "dist"
-  command = "npm install typescript && npx tsc && vite build"
+  command = "npm install && npm run build"
 
 [build.environment]
-  NODE_ENV = "production"
+  NODE_ENV = "development"
 
 [[redirects]]
   from = "/api/*"

@@ -520,9 +520,10 @@ async function searchNews(searchTerm, config) {
  * Get news items from multiple countries
  * 
  * @param {Object} config - Configuration parameters
+ * @param {boolean} [isStartup=false] - Whether this is the initial startup fetch
  * @returns {Array} - Array of news items
  */
-async function getNews(config) {
+async function getNews(config, isStartup = false) {
   try {
     logger.info('Getting news from multiple countries');
     
@@ -538,19 +539,23 @@ async function getNews(config) {
     const dayProgress = hoursElapsed / 24; // 0 to 1 representing progress through the day
     const targetUsage = Math.floor(200 * dayProgress);
     
-    // Determine how many countries to process based on our position relative to target
-    let countriesToProcess = 1; // Default to 1 country
+    // On startup, only process one country to avoid rate limits
+    let countriesToProcess = isStartup ? 1 : 1; // Default to 1 country
     
-    if (currentUsage < targetUsage - 10) {
-      // We're behind schedule, process more countries
-      countriesToProcess = Math.min(3, Math.floor((targetUsage - currentUsage) / 3));
-      logger.info(`Behind target usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} countries`);
-    } else if (currentUsage > targetUsage + 10) {
-      // We're ahead of schedule, be more conservative
-      countriesToProcess = 1;
-      logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), processing only ${countriesToProcess} country`);
+    if (!isStartup) {
+      if (currentUsage < targetUsage - 10) {
+        // We're behind schedule, process more countries
+        countriesToProcess = Math.min(3, Math.floor((targetUsage - currentUsage) / 3));
+        logger.info(`Behind target usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} countries`);
+      } else if (currentUsage > targetUsage + 10) {
+        // We're ahead of schedule, be more conservative
+        countriesToProcess = 1;
+        logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), processing only ${countriesToProcess} country`);
+      } else {
+        logger.info(`On target with usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} country`);
+      }
     } else {
-      logger.info(`On target with usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} country`);
+      logger.info('Initial startup fetch - processing only one country');
     }
     
     // If we're near the daily limit, don't process any countries
