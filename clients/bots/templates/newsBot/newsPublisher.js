@@ -164,12 +164,15 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
           }
         }
         
+        // Make sure we're using the latest token after possible authentication
+        const tokenToUse = bot.authToken;
+        
         logger.info('Using bot.authToken for authentication');
         
         // Make the API request
         const apiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
         logger.info(`Sending post request to: ${apiUrl}`);
-        logger.info(`Request headers: Auth=${authToken ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
+        logger.info(`Request headers: Auth=${tokenToUse ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
         
         // Extract message content from newsItem 
         const messageText = typeof newsItem.formattedContent === 'string' 
@@ -213,7 +216,7 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
         const response = await axios.post(apiUrl, directForm, {
           headers: {
             ...directForm.getHeaders(),
-            'Authorization': `Bearer ${authToken}`,
+            'Authorization': `Bearer ${tokenToUse}`,
             'X-API-Key': apiKey
           }
         });
@@ -286,12 +289,11 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
                 // Create a direct multipart form data request for retry
                 const retryDirectForm = new FormData();
                 
-                // Add the critical message field
+                // Add the critical fields
                 retryDirectForm.append('message', retryMessageText);
-                
-                // Add username
-                const retryUsername = (bot && bot.username) ? bot.username : 'NewsBot';
-                retryDirectForm.append('username', retryUsername);
+                const retrySocketId = `newsbot_retry_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+                retryDirectForm.append('socketId', retrySocketId);
+                retryDirectForm.append('username', (bot && bot.username) ? bot.username : 'NewsBot');
                 
                 // Add location if available
                 if (newsItem.location) {
@@ -302,23 +304,20 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
                   }));
                 }
                 
-                // Add the image file
-                retryDirectForm.append('image', fs.createReadStream(tempFilePath));
+                // Add the image file for retry
+                retryDirectForm.append('image', fs.createReadStream(tempFilePath), {
+                  filename: path.basename(tempFilePath),
+                  contentType: getFileTypeFromPath(tempFilePath)
+                });
                 
-                // Log what we're about to send in retry
-                logger.info(`Retrying with message: "${retryMessageText.substring(0, 50)}..."`);
+                // Get the current token after re-authentication
+                const currentToken = bot.authToken;
                 
-                // Add socketId field which is required for retry
-                const retrySocketId = `newsbot_retry_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-                retryDirectForm.append('socketId', retrySocketId);
-                
-                // Update the API URL for retry to use the with-image endpoint
-                const retryApiUrl = `${MAIN_SERVER_URL}/api/messages/with-image`;
-                
-                const retryResponse = await axios.post(retryApiUrl, retryDirectForm, {
+                // Send the retry request
+                const retryResponse = await axios.post(apiUrl, retryDirectForm, {
                   headers: {
                     ...retryDirectForm.getHeaders(),
-                    'Authorization': `Bearer ${bot.authToken}`,
+                    'Authorization': `Bearer ${currentToken}`,
                     'X-API-Key': bot.apiKey || process.env.BOT_API_KEY || 'dev-bot-api-key'
                   }
                 });
