@@ -17,7 +17,11 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // Debug: Log the request URL
-    console.log('Making request to:', config.baseURL + config.url);
+    if (config.baseURL && config.url) {
+      console.log('Making request to:', config.baseURL + config.url);
+    } else {
+      console.log('Making request:', config);
+    }
     
     const token = localStorage.getItem('token');
     if (token) {
