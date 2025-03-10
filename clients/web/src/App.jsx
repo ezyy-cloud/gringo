@@ -246,9 +246,44 @@ function App() {
             console.log('🔄 fetchMessagesWithoutReset: No messages with location found.');
           }
           
-          // Replace messages with new filtered formatted data
-          console.log('🔄 fetchMessagesWithoutReset: Setting messages state with filtered data');
-          setMessages(recentMessages);
+          // Update messages state efficiently by comparing with previous messages
+          // This helps prevent unnecessary re-renders
+          setMessages(prevMessages => {
+            // If the message count is the same, check if the content is actually different
+            if (prevMessages.length === recentMessages.length) {
+              // Check if the messages are actually different by comparing IDs
+              const prevIds = new Set(prevMessages.map(msg => msg.dbId));
+              const newIds = new Set(recentMessages.map(msg => msg.dbId));
+              
+              // If all IDs match, check if any message content has changed
+              if (prevIds.size === newIds.size && 
+                  [...prevIds].every(id => newIds.has(id))) {
+                
+                // Check if any message content has changed
+                const hasChanges = recentMessages.some(newMsg => {
+                  const prevMsg = prevMessages.find(p => p.dbId === newMsg.dbId);
+                  if (!prevMsg) return true;
+                  
+                  // Compare relevant fields
+                  return (
+                    prevMsg.content !== newMsg.content ||
+                    prevMsg.likesCount !== newMsg.likesCount ||
+                    prevMsg.likedByCurrentUser !== newMsg.likedByCurrentUser
+                  );
+                });
+                
+                // If no changes, return the previous messages to prevent re-render
+                if (!hasChanges) {
+                  console.log('🔄 fetchMessagesWithoutReset: No changes in messages, preventing re-render');
+                  return prevMessages;
+                }
+              }
+            }
+            
+            // If we get here, there are actual changes, so return the new messages
+            console.log('🔄 fetchMessagesWithoutReset: Setting messages state with filtered data');
+            return recentMessages;
+          });
         } else {
           console.log('🔄 fetchMessagesWithoutReset: No messages array in response or empty array', response.messages);
           
@@ -604,18 +639,12 @@ function App() {
   }, []);
   
   // Add event listener for map-initiated message fetching
-  useEffect(() => {
-    // Create a debounced handler to prevent multiple rapid calls
-    let mapFetchTimeoutId = null;
-    
-    const fetchMessagesHandler = () => {
-      console.log('🔍 App: Received fetchMessages request from MapView');
-      
-      // Clear any existing timeout
-      if (mapFetchTimeoutId) {
-        clearTimeout(mapFetchTimeoutId);
-      }
-      
+  // NOTE: This approach has been replaced with direct prop passing.
+  // The handleRefreshMap function below is now passed directly to the MapView component.
+  
+  // Create a safe wrapper for fetchMessagesWithoutReset that includes debouncing
+  const handleRefreshMap = useCallback(() => {
+    try {
       // Check if we're already fetching or have fetched recently
       const now = Date.now();
       const timeSinceLastFetch = now - lastFetchTime;
@@ -627,12 +656,18 @@ function App() {
       }
       
       if (timeSinceLastFetch < minTimeBetweenFetches) {
-        console.log(`🔍 App: Recently fetched messages (${timeSinceLastFetch}ms ago), delaying new fetch`);
+        console.log(`🔍 App: Recently fetched messages (${timeSinceLastFetch}ms ago), will fetch after cooling period`);
         
-        // Schedule a delayed fetch if it's been too recent
-        mapFetchTimeoutId = setTimeout(() => {
-          console.log('🔍 App: Executing delayed fetch after cooldown');
-          fetchMessagesWithoutReset();
+        // Wait until the cooling period is over
+        setTimeout(() => {
+          try {
+            fetchMessagesWithoutReset();
+          } catch (error) {
+            console.error('🔍 App: Error in delayed fetchMessagesWithoutReset:', error);
+            // Set fetch state back to idle so future fetches can proceed
+            setFetchState(MESSAGE_FETCH_STATES.IDLE);
+            setIsLoading(false);
+          }
         }, minTimeBetweenFetches - timeSinceLastFetch);
         
         return;
@@ -640,20 +675,14 @@ function App() {
       
       // If we get here, it's safe to fetch immediately
       fetchMessagesWithoutReset();
-    };
-    
-    // Add event listener
-    window.addEventListener('map:fetchMessages', fetchMessagesHandler);
-    
-    // Clean up
-    return () => {
-      window.removeEventListener('map:fetchMessages', fetchMessagesHandler);
-      if (mapFetchTimeoutId) {
-        clearTimeout(mapFetchTimeoutId);
-      }
-    };
-  }, [lastFetchTime, fetchState, fetchMessagesWithoutReset]);  // Include dependencies
-  
+    } catch (error) {
+      console.error('🔍 App: Error in handleRefreshMap:', error);
+      // Set fetch state back to idle so future fetches can proceed
+      setFetchState(MESSAGE_FETCH_STATES.IDLE);
+      setIsLoading(false);
+    }
+  }, [lastFetchTime, fetchState, fetchMessagesWithoutReset]);
+
   // Get user location and set up auto-update
   useEffect(() => {
     // Define the function to get user location
@@ -1147,6 +1176,7 @@ function App() {
             isLoading={isLoading}
             canUserSendMessage={canUserSendMessage}
             getTimeRemainingBeforeNextMessage={getTimeRemainingBeforeNextMessage}
+            handleRefreshMap={handleRefreshMap}
           />
         ) : (
           <Auth 

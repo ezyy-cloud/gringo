@@ -12,6 +12,8 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
   const [showForecast, setShowForecast] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const timeoutRef = useRef(null);
+  const lastCoordsRef = useRef({ latitude, longitude });
+  const hasInitialFetchRef = useRef(false);
 
   const getWeatherIcon = (weatherCode) => {
     // Weather codes based on OpenWeatherMap API
@@ -22,6 +24,15 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
     if (weatherCode === 800) return <WiDaySunny className="weather-icon" />;
     if (weatherCode > 800) return <WiCloudy className="weather-icon" />;
     return <GoCloud className="weather-icon" />;
+  };
+
+  // Function to check if coordinates have changed significantly (more than 0.05 degrees ~ 5.5km)
+  const hasSignificantCoordinateChange = (oldLat, oldLng, newLat, newLng) => {
+    const threshold = 0.05; // ~5.5km
+    return (
+      Math.abs(oldLat - newLat) > threshold || 
+      Math.abs(oldLng - newLng) > threshold
+    );
   };
 
   useEffect(() => {
@@ -35,7 +46,10 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
       });
       
       try {
-        setLoading(true);
+        if (!weather) {
+          setLoading(true); // Only set loading if there's no current weather data
+        }
+        
         const response = await fetch(
           `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&units=metric&appid=${import.meta.env.VITE_OPENWEATHER_API_KEY}`
         );
@@ -50,12 +64,13 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
           country: data.sys.country,
           temperature: `${Math.round(data.main.temp)}°C`,
           conditions: data.weather[0].description,
-          timestamp: new Date().toISOString(),
-          fullData: data
+          timestamp: new Date().toISOString()
         });
 
         setWeather(data);
         setError(null);
+        lastCoordsRef.current = { latitude, longitude }; // Update last successful coordinates
+        hasInitialFetchRef.current = true;
       } catch (err) {
         const errorMessage = 'Could not load weather data';
         console.error('🌤️ Weather API Error:', {
@@ -73,21 +88,43 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
       }
     };
 
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      console.log('🌤️ Weather API: Cleared previous fetch timeout due to coordinate change');
+    // Initial fetch when component mounts - fetch immediately
+    if (!hasInitialFetchRef.current) {
+      console.log('🌤️ Weather API: Doing initial fetch without delay');
+      fetchWeather();
+      return;
     }
 
-    // Set a new timeout to fetch weather data after 1 minute of no coordinate changes
-    console.log('🌤️ Weather API: Setting 1-minute delay for new coordinates', {
+    // Check if coordinates have changed significantly
+    const significantChange = hasSignificantCoordinateChange(
+      lastCoordsRef.current.latitude, 
+      lastCoordsRef.current.longitude,
+      latitude,
+      longitude
+    );
+
+    // If no significant change, don't reset the timeout or loading state
+    if (!significantChange) {
+      console.log('🌤️ Weather API: Coordinates haven\'t changed significantly, continuing with current weather data');
+      return;
+    }
+
+    // Clear any existing timeout if coordinates have changed significantly
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      console.log('🌤️ Weather API: Cleared previous fetch timeout due to significant coordinate change');
+    }
+
+    // Set a new timeout to fetch weather data after 10 seconds of no significant coordinate changes
+    // This is much quicker than the previous 1 minute delay
+    console.log('🌤️ Weather API: Setting 10-second delay for new coordinates', {
       latitude: latitude.toFixed(4),
       longitude: longitude.toFixed(4),
-      delayTime: '1 minute'
+      delayTime: '10 seconds'
     });
 
     timeoutRef.current = setTimeout(() => {
-      console.log('🌤️ Weather API: 1-minute delay completed, initiating fetch');
+      console.log('🌤️ Weather API: 10-second delay completed, initiating fetch');
       fetchWeather();
       
       // Set up the 5-minute refresh interval after the initial fetch
@@ -100,7 +137,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
         clearInterval(interval);
         console.log('🌤️ Weather API: Cleared 5-minute refresh interval');
       };
-    }, 60 * 1000); // 1 minute delay
+    }, 10 * 1000); // 10 seconds delay instead of 1 minute
 
     // Cleanup function to clear the timeout when coordinates change or component unmounts
     return () => {
@@ -109,7 +146,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
         console.log('🌤️ Weather API: Cleanup - cleared fetch timeout');
       }
     };
-  }, [latitude, longitude]);
+  }, [latitude, longitude, weather]);
 
   const handleWidgetClick = () => {
     if (showDetails) {
@@ -125,7 +162,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
     }
   };
 
-  if (loading) {
+  if (loading && !weather) {
     return (
       <div className={`weather-widget icon-only ${isDarkMode ? 'dark-mode' : ''}`}>
         <div className="weather-loading">
@@ -135,7 +172,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
     );
   }
 
-  if (error || !weather) {
+  if (error && !weather) {
     return (
       <div className={`weather-widget icon-only ${isDarkMode ? 'dark-mode' : ''}`}>
         <div className="weather-error">
@@ -145,10 +182,12 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
     );
   }
 
+  // Show the last known weather data even if we're loading new data
+  // This prevents the spinning icon from showing repeatedly
   return (
     <>
       <div 
-        className={`weather-widget ${showDetails ? '' : 'icon-only'} ${isDarkMode ? 'dark-mode' : ''}`}
+        className={`weather-widget ${showDetails ? '' : 'icon-only'} ${isDarkMode ? 'dark-mode' : ''} ${loading ? 'updating' : ''}`}
         onClick={handleWidgetClick}
         onBlur={handleWidgetBlur}
         role="button"
@@ -160,8 +199,9 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
         }}
       >
         <div className="weather-content">
-          {getWeatherIcon(weather.weather[0].id)}
-          {showDetails && (
+          {weather && getWeatherIcon(weather.weather[0].id)}
+          {!weather && <GoCloud className="weather-icon" />}
+          {showDetails && weather && (
             <div className="weather-info">
               <div className="weather-temp">{Math.round(weather.main.temp)}°C</div>
               <div className="weather-desc">{weather.weather[0].description}</div>

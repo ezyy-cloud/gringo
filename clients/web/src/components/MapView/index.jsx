@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import React from 'react';
 import ReactMapGL, { Marker, Popup, Source, Layer } from 'react-map-gl';
 import { useNavigate } from 'react-router-dom';
 import { GoHeart, GoHeartFill, GoLocation, GoHome, GoStack } from "react-icons/go";
@@ -12,7 +13,10 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import './styles.css';
 import '../MapView3D/styles.css';
 
-const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkMode, isLoading }) => {
+// Create a memoized version of WeatherWidget
+const MemoizedWeatherWidget = React.memo(WeatherWidget);
+
+const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkMode, isLoading, onRefreshMap }) => {
   // Debug log for received messages
   console.log(`🗺️ MapView: Received ${messages?.length || 0} messages`);
   console.log('🗺️ MapView: Current userLocation:', userLocation);
@@ -39,7 +43,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Add a ref to store the previous messages count to detect refreshes
   const prevMessagesCountRef = useRef(0);
 
-  // Add a custom useEffect to fetch messages when the map component mounts
+  // Fetch messages when the map component mounts, but only once
   useEffect(() => {
     // Only fetch messages on first mount, not on re-renders
     const hasFetchedKey = 'mapview_has_fetched_messages';
@@ -48,10 +52,11 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     const hasFetched = sessionStorage.getItem(hasFetchedKey);
     
     if (!hasFetched) {
-      console.log('🗺️ MapView: First mount, dispatching custom event to fetch messages');
-      // Dispatch a custom event to notify App component to fetch messages
-      const fetchMessagesEvent = new CustomEvent('map:fetchMessages');
-      window.dispatchEvent(fetchMessagesEvent);
+      console.log('🗺️ MapView: First mount, calling refresh function');
+      // Call the provided refresh function instead of dispatching an event
+      if (onRefreshMap) {
+        onRefreshMap();
+      }
       
       // Mark that we've fetched messages in this session
       sessionStorage.setItem(hasFetchedKey, 'true');
@@ -66,7 +71,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         sessionStorage.removeItem(hasFetchedKey);
       }
     };
-  }, []);
+  }, [onRefreshMap]); // Add onRefreshMap as a dependency
 
   // Monitor messages count changes and log when they change
   useEffect(() => {
@@ -77,6 +82,42 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
       prevMessagesCountRef.current = messagesCount;
     }
   }, [messages]);
+
+  // We'll add a function to safely request refresh without causing page reloads
+  const safeRefreshMap = useCallback(() => {
+    console.log('🗺️ MapView: Safe refresh requested');
+    if (onRefreshMap) {
+      // Use the provided function from props rather than triggering global events
+      onRefreshMap();
+    }
+  }, [onRefreshMap]);
+
+  // Handle the manual refresh button click
+  const handleRefreshButtonClick = useCallback((e) => {
+    // Prevent default behavior that might cause page reloads
+    e.preventDefault();
+    console.log('🗺️ MapView: Manual refresh requested via button');
+    safeRefreshMap();
+  }, [safeRefreshMap]);
+
+  // Set up automatic refresh on visibility change (when tab becomes active)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('🗺️ MapView: Document became visible, triggering refresh');
+        // Wait a moment before refreshing to ensure the browser is ready
+        setTimeout(() => {
+          safeRefreshMap();
+        }, 500);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [safeRefreshMap]);
 
   // Handle navigation to user profile
   const navigateToProfile = (username, e) => {
@@ -275,6 +316,15 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     }
   };
 
+  // Filter messages that have valid location data with useMemo
+  const messagesWithLocation = useMemo(() => {
+    console.log('🗺️ MapView: Filtering messages with location data');
+    return messages.filter(msg => 
+      msg.location && !msg.location.error && 
+      msg.location.latitude && msg.location.longitude
+    );
+  }, [messages]);
+
   // Set map view only when component mounts or userLocation changes (but NOT when messages update)
   useEffect(() => {
     // Only set the initial position once
@@ -290,12 +340,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         return;
       }
       
-      // Second priority: Use location from recent messages
-      const messagesWithLocation = messages.filter(msg => 
-        msg.location && !msg.location.error && 
-        msg.location.latitude && msg.location.longitude
-      );
-
+      // Second priority: Use location from messagesWithLocation
       if (messagesWithLocation.length > 0) {
         // Use the location of the most recent message
         const latestMessage = messagesWithLocation[messagesWithLocation.length - 1];
@@ -307,7 +352,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         hasSetInitialPosition.current = true;
       }
     }
-  }, [userLocation]); // Remove messages from dependencies to avoid resetting view on refresh
+  }, [userLocation, messagesWithLocation]); // Include messagesWithLocation
 
   // Track message refreshes for debugging and handle selected message updates
   useEffect(() => {
@@ -331,12 +376,6 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     }
   }, [messages, selectedMessage]);
   
-  // Filter messages that have valid location data
-  const messagesWithLocation = messages.filter(msg => 
-    msg.location && !msg.location.error && 
-    msg.location.latitude && msg.location.longitude
-  );
-
   // Log the like status for all messages on the map
   useEffect(() => {
     if (messagesWithLocation.length > 0 && currentUsername) {
@@ -473,6 +512,13 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     }
   };
 
+  // Memoize the weather widget props to prevent re-renders when only messages change
+  const weatherWidgetProps = useMemo(() => ({
+    latitude: viewState.latitude,
+    longitude: viewState.longitude,
+    isDarkMode: isDarkMode
+  }), [viewState.latitude, viewState.longitude, isDarkMode]);
+
   return (
     <div className={`map-container ${is3DMode ? 'is-3d-mode' : ''}`}>
       <ReactMapGL
@@ -491,11 +537,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           </div>
         )}
         
-        <WeatherWidget 
-          latitude={viewState.latitude}
-          longitude={viewState.longitude}
-          isDarkMode={isDarkMode}
-        />
+        <MemoizedWeatherWidget {...weatherWidgetProps} />
         
         {messagesWithLocation.map((message, index) => (
           <Marker
@@ -647,11 +689,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           {!isLoading && (
             <button 
               className="refresh-button"
-              onClick={() => {
-                console.log('🗺️ MapView: Manual refresh requested');
-                const fetchMessagesEvent = new CustomEvent('map:fetchMessages');
-                window.dispatchEvent(fetchMessagesEvent);
-              }}
+              onClick={handleRefreshButtonClick}
             >
               Refresh Map
             </button>
@@ -685,7 +723,8 @@ MapView.propTypes = {
     isFallback: PropTypes.bool
   }),
   isDarkMode: PropTypes.bool,
-  isLoading: PropTypes.bool
+  isLoading: PropTypes.bool,
+  onRefreshMap: PropTypes.func
 };
 
 MapView.defaultProps = {
@@ -694,7 +733,8 @@ MapView.defaultProps = {
   onlineUsers: {},
   userLocation: null,
   isDarkMode: false,
-  isLoading: false
+  isLoading: false,
+  onRefreshMap: null
 };
 
 export default MapView; 

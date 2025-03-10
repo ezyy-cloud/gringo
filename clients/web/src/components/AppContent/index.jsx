@@ -23,7 +23,8 @@ const AppContent = ({
   onClearNotifications,
   isLoading,
   canUserSendMessage,
-  getTimeRemainingBeforeNextMessage
+  getTimeRemainingBeforeNextMessage,
+  handleRefreshMap
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [countdownModalOpen, setCountdownModalOpen] = useState(false);
@@ -163,6 +164,7 @@ const AppContent = ({
                   userLocation={userLocation}
                   isDarkMode={isDarkMode}
                   isLoading={isLoading}
+                  onRefreshMap={handleRefreshMap}
                 />
               </div>
             </main>
@@ -236,7 +238,8 @@ AppContent.propTypes = {
   onClearNotifications: PropTypes.func,
   isLoading: PropTypes.bool,
   canUserSendMessage: PropTypes.func,
-  getTimeRemainingBeforeNextMessage: PropTypes.func
+  getTimeRemainingBeforeNextMessage: PropTypes.func,
+  handleRefreshMap: PropTypes.func
 };
 
 export default AppContent; 
