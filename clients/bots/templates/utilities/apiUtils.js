@@ -6,6 +6,43 @@
  */
 
 const axios = require('axios');
+const { logger } = require('../../utils');
+
+/**
+ * Safely stringify an object, handling circular references
+ * 
+ * @param {Object} obj - The object to stringify
+ * @returns {string} - JSON string representation of the object
+ */
+const safeStringify = (obj) => {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, value) => {
+    // Skip null and undefined values
+    if (value === null || value === undefined) {
+      return value;
+    }
+    
+    // Handle circular references
+    if (typeof value === 'object') {
+      if (seen.has(value)) {
+        return '[Circular Reference]';
+      }
+      seen.add(value);
+    }
+    
+    // Handle Error objects
+    if (value instanceof Error) {
+      return {
+        message: value.message,
+        name: value.name,
+        stack: value.stack,
+        code: value.code
+      };
+    }
+    
+    return value;
+  }, 2);
+};
 
 /**
  * Make an API request with retry capabilities
@@ -18,6 +55,7 @@ const axios = require('axios');
  * @param {Object} options.headers - Request headers
  * @param {number} options.maxRetries - Maximum number of retries
  * @param {number} options.retryDelay - Delay between retries in ms
+ * @param {boolean} options.logResponse - Whether to log the response
  * @returns {Object} - Response data
  */
 const makeRequest = async (options) => {
@@ -29,11 +67,12 @@ const makeRequest = async (options) => {
     headers = {},
     maxRetries = 3,
     retryDelay = 1000,
+    logResponse = false
   } = options;
   
   let attempts = 0;
   
-  while (attempts <= maxRetries) {
+  while (attempts < maxRetries) {
     try {
       // Make the request with axios
       const response = await axios({
@@ -42,66 +81,65 @@ const makeRequest = async (options) => {
         params,
         data,
         headers,
-        timeout: 15000 // 15 second timeout
+        timeout: 10000 // 10 second timeout
       });
       
+      if (logResponse) {
+        logger.debug(`API Response (${url}):`, response.data);
+      }
+      
+      // Log the full response structure for debugging
+      logger.info(`API response structure: ${Object.keys(response).join(', ')}`);
+      
+      // Return the full response object instead of just response.data
       return response;
     } catch (error) {
       attempts++;
       
-      // Special handling for rate limiting (429)
-      if (error.response && error.response.status === 429) {
-        // Get retry-after header or use a longer default (30 seconds)
-        const retryAfter = error.response.headers['retry-after'] 
-          ? parseInt(error.response.headers['retry-after'], 10) * 1000 
-          : 30000; // Default to 30 seconds if no Retry-After header
-        
-        console.log(`Rate limit exceeded (429). Waiting ${retryAfter/1000} seconds before retry ${attempts}/${maxRetries}`);
-        
-        // If this is our last attempt, don't wait just to fail
-        if (attempts <= maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, retryAfter));
-          continue;
-        } else {
-          // If we've exhausted retries for rate limiting, throw a specific error
-          throw {
-            message: "Rate limit exceeded and max retries reached",
-            status: 429,
-            originalError: error
-          };
-        }
+      // Check if we should retry
+      if (attempts >= maxRetries) {
+        throw error;
       }
-      // Check if we should retry other errors
-      else if (attempts <= maxRetries && shouldRetry(error)) {
-        console.log(`API request failed (attempt ${attempts}/${maxRetries}): ${error.message}`);
+      
+      // Handle rate limiting (429)
+      if (error.response && error.response.status === 429) {
+        // Get retry-after header or use default delay
+        const retryAfter = (error.response.headers['retry-after'] * 1000) || retryDelay * Math.pow(2, attempts);
         
-        // Wait before retrying with exponential backoff
-        const delay = retryDelay * Math.pow(2, attempts - 1);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        logger.info(`Rate limit exceeded (429). Waiting ${retryAfter/1000} seconds before retry ${attempts}/${maxRetries}`);
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, retryAfter));
         continue;
       }
       
-      // If we've exhausted retries or shouldn't retry, throw the error
-      throw error;
+      // For other errors, use exponential backoff
+      const delay = retryDelay * Math.pow(2, attempts - 1);
+      
+      // Create a detailed error log
+      const errorDetails = {
+        message: error.message,
+        name: error.name,
+        code: error.code
+      };
+      
+      // Add response details if available
+      if (error.response) {
+        errorDetails.response = {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        };
+      }
+      
+      logger.info(`API request failed (attempt ${attempts}/${maxRetries}): ${safeStringify(errorDetails)}`);
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-};
-
-/**
- * Determine if a failed request should be retried
- *
- * @param {Error} error - The error that occurred
- * @returns {boolean} - Whether to retry the request
- */
-const shouldRetry = (error) => {
-  // Retry on network errors
-  if (!error.response) {
-    return true;
-  }
   
-  // Retry on certain status codes
-  const retryStatusCodes = [429, 500, 502, 503, 504];
-  return retryStatusCodes.includes(error.response.status);
+  throw new Error(`Failed after ${maxRetries} attempts`);
 };
 
 /**
@@ -115,7 +153,7 @@ const validateImageUrl = (imageUrl) => {
   
   // Fix URL format if needed
   if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-    console.log(`Fixing image URL format: ${imageUrl}`);
+    logger.info(`Fixing image URL format: ${imageUrl}`);
     imageUrl = 'https://' + imageUrl.replace(/^\/\//, '');
   }
   
@@ -145,7 +183,7 @@ const processApiResults = (results, options = {}) => {
   if (debug && results.some(item => item.source_id)) {
     const sources = results.map(item => item.source_id).filter(Boolean);
     const uniqueSources = [...new Set(sources)];
-    console.log(`${uniqueSourcesMessage} ${uniqueSources.join(', ')}`);
+    logger.info(`${uniqueSourcesMessage} ${uniqueSources.join(', ')}`);
   }
   
   // Log the countries if available
@@ -156,7 +194,7 @@ const processApiResults = (results, options = {}) => {
     const uniqueCountries = [...new Set(countries)];
     
     if (uniqueCountries.length > 0) {
-      console.log(`${uniqueCountriesMessage} ${uniqueCountries.join(', ')}`);
+      logger.info(`${uniqueCountriesMessage} ${uniqueCountries.join(', ')}`);
     }
   }
   
@@ -177,10 +215,29 @@ const downloadWithRetry = async (url, options = {}, retries = 2) => {
     const response = await axios.get(url, options);
     return response.data;
   } catch (error) {
+    // Create a detailed error object for logging
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    };
+    
+    // Add response details if available
+    if (error.response) {
+      errorDetails.response = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      };
+    }
+    
+    // Log the detailed error
+    logger.error(`Download error for URL ${url}: ${safeStringify(errorDetails)}`);
+    
     if (retries > 0 && error.response) {
       // Retry on certain status codes
       if ([429, 503, 502, 500, 422].includes(error.response.status)) {
-        console.log(`Request failed with status ${error.response.status}. Retrying... (${retries} attempts left)`);
+        logger.info(`Request failed with status ${error.response.status}. Retrying... (${retries} attempts left)`);
         
         // Wait before retry with exponential backoff (1s, 2s, 4s...)
         const delay = 1000 * Math.pow(2, 3 - retries);
@@ -244,5 +301,6 @@ module.exports = {
   validateImageUrl,
   processApiResults,
   downloadWithRetry,
-  formatContentWithUrl
+  formatContentWithUrl,
+  safeStringify
 }; 

@@ -10,6 +10,7 @@ const templateManager = require('./templateManager');
 const botLifecycle = require('./botLifecycle');
 const botAccess = require('./botAccess');
 const helpers = require('./helpers');
+const { logger } = require('../utils');
 
 /**
  * BotFactory class for managing bot templates and instances
@@ -23,7 +24,7 @@ class BotFactory {
     this.botTemplates = new Map();
     this.activeBots = new Map();
     
-    console.log('Bot factory initialized');
+    logger.info('Bot factory initialized');
   }
   
   //==============================================
@@ -122,19 +123,19 @@ class BotFactory {
    */
   async startBot(type, botData) {
     try {
-      console.log(`Starting bot of type ${type} with ID ${botData._id || botData.id}`);
+      logger.info(`Starting bot of type ${type} with ID ${botData._id || botData.id}`);
       
       // Check if a bot with this ID is already active
       const botId = botData._id || botData.id;
       if (this.activeBots.has(botId)) {
-        console.log(`Bot ${botId} is already active`);
+        logger.info(`Bot ${botId} is already active`);
         return this.activeBots.get(botId);
       }
       
       // Get the template for this bot type
       const template = this.getBotTemplate(type);
       if (!template) {
-        console.error(`No template found for bot type: ${type}`);
+        logger.error(`No template found for bot type: ${type}`);
         return null;
       }
       
@@ -146,7 +147,7 @@ class BotFactory {
       });
       
       if (!bot) {
-        console.error(`Failed to initialize bot of type ${type}`);
+        logger.error(`Failed to initialize bot of type ${type}`);
         return null;
       }
       
@@ -156,10 +157,10 @@ class BotFactory {
       // Add the bot to active bots
       this.activeBots.set(botId, bot);
       
-      console.log(`Bot ${botId} of type ${type} started successfully`);
+      logger.info(`Bot ${botId} of type ${type} started successfully`);
       return bot;
     } catch (error) {
-      console.error(`Error starting bot of type ${type}:`, error);
+      logger.error(`Error starting bot of type ${type}:`, error);
       return null;
     }
   }

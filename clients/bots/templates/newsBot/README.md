@@ -6,6 +6,7 @@ A streamlined bot that monitors news sources and posts breaking news updates to 
 
 - Fetches breaking news from NewsData.io API with advanced filtering
 - **Rotates through all 206 countries** to provide truly global news coverage
+- **Fetches news for 5 countries at once** for more efficient API usage
 - Gets only news with images from the last 6 hours
 - Extracts and geocodes location information from news articles
 - Only posts news items that have valid location coordinates
@@ -33,7 +34,7 @@ The news bot accepts the following configuration parameters:
   contentMaxLength: 120,               // Maximum content length
   postFrequency: 60,                   // Minutes between posts
   postWithLocation: true,              // Whether to include location data
-  countries: "us,gb,ca,au,in,fr,de,jp", // Countries to source news from
+  countries: "us,gb,ca,au,in,fr,de,jp", // Countries to source news from (up to 5 at once)
   categories: "top,world",              // News categories
   language: "en",                       // News language
   requireLocation: false,               // Only post news with locations

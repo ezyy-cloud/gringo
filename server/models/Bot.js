@@ -34,7 +34,7 @@ const BotSchema = new mongoose.Schema({
   },
   capabilities: [{
     type: String,
-    enum: ['messaging', 'notifications', 'eventResponse', 'commandProcessing', 'userInteraction']
+    enum: ['messaging', 'notifications', 'eventResponse', 'commandProcessing', 'userInteraction', 'moderation', 'content-analysis']
   }],
   status: {
     type: String,

@@ -1,135 +1,81 @@
 /**
- * Bot Templates Registration
+ * Bot Templates Index
  * 
- * This file handles the registration of all bot templates with the BotFactory.
- * Templates are loaded dynamically from individual directories in the templates directory.
+ * This file is responsible for registering all bot templates with the BotFactory.
+ * It scans the templates directory for subdirectories, each containing a bot template.
  */
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 const { logger } = require('../utils');
 
 /**
  * Register all bot templates with the BotFactory
- * @param {Object} botFactory - Instance of the BotFactory class
- * @returns {number} - Number of templates registered
+ * @param {Object} botFactory - The BotFactory instance
+ * @returns {Number} - The number of templates registered
  */
 function registerTemplates(botFactory) {
-  let registeredCount = 0;
-  
   // Get the templates directory path
   const templatesDir = path.join(__dirname);
   
-  try {
-    // Get all directory entries
-    const entries = fs.readdirSync(templatesDir, { withFileTypes: true });
-    
-    // Filter for directories that end with 'Bot' and have an index.js file
-    const templateDirs = entries
-      .filter(entry => entry.isDirectory() && entry.name.endsWith('Bot'))
-      .map(dir => dir.name);
-    
-    logger.info(`Found ${templateDirs.length} template directories in ${templatesDir}`);
-    console.log('TEMPLATE DIRECTORIES FOUND:', templateDirs);
-    
-    // Register each template
-    templateDirs.forEach(dirName => {
-      try {
-        // Get template name without the 'Bot' suffix
-        const templateName = dirName.replace(/Bot$/, '').toLowerCase();
-        
-        // Require the template file (index.js in the directory)
-        const templatePath = path.join(templatesDir, dirName, 'index.js');
-        
-        if (!fs.existsSync(templatePath)) {
-          logger.warn(`No index.js found in template directory: ${dirName}`);
-          return;
-        }
-        
-        const template = require(templatePath);
-        
-        console.log(`LOADING TEMPLATE ${templateName}:`, {
-          name: template.name,
-          description: template.description,
-          hasInitialize: typeof template.initialize === 'function'
-        });
-        
-        // Register the template with its name
-        botFactory.registerBotTemplate(templateName, template);
-        
-        // Special case for newsBot - ensure it's also registered as 'news'
-        if (dirName === 'newsBot' && templateName !== 'news') {
-          console.log(`Ensuring newsBot is also registered as 'news' template`);
-          botFactory.registerBotTemplate('news', template);
-        }
-        
-        logger.info(`Registered bot template: ${templateName}`);
-        registeredCount++;
-      } catch (error) {
-        logger.error(`Failed to register template ${dirName}`, error);
-        console.error(`ERROR REGISTERING TEMPLATE ${dirName}:`, error);
+  // Get all subdirectories in the templates directory
+  const templateDirs = fs.readdirSync(templatesDir, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.') && dirent.name !== 'utilities')
+    .map(dirent => dirent.name);
+  
+  logger.info('TEMPLATE DIRECTORIES FOUND:', templateDirs);
+  
+  // Register each template
+  let registeredCount = 0;
+  
+  for (const dirName of templateDirs) {
+    try {
+      // Get the template module
+      const templatePath = path.join(templatesDir, dirName);
+      const templateName = dirName.replace(/Bot$/i, '').toLowerCase();
+      
+      // Skip if no index.js file
+      if (!fs.existsSync(path.join(templatePath, 'index.js'))) {
+        continue;
       }
-    });
-    
-    // Register legacy templates for backward compatibility
-    registerLegacyTemplates(botFactory, templateDirs);
-    
-    // Log the final templates collection
-    console.log('REGISTERED TEMPLATES:', Array.from(botFactory.botTemplates.keys()));
-    console.log('TEMPLATE DETAILS:');
-    for (const [name, template] of botFactory.botTemplates.entries()) {
-      console.log(`- ${name}: ${template.name || name}`);
+      
+      // Require the template module
+      const template = require(path.join(templatePath));
+      
+      // Log template details
+      logger.info(`LOADING TEMPLATE ${templateName}:`, {
+        name: template.name,
+        description: template.description,
+        hasInitialize: typeof template.initialize === 'function'
+      });
+      
+      // Register the template with the BotFactory
+      botFactory.registerBotTemplate(templateName, template);
+      registeredCount++;
+      
+      // Special case for newsBot - also register as 'news'
+      if (dirName === 'newsBot' && templateName !== 'news') {
+        logger.info(`Ensuring newsBot is also registered as 'news' template`);
+        botFactory.registerBotTemplate('news', template);
+      }
+      
+      // Special case for moderatorBot - also register as 'moderator'
+      if (dirName === 'moderatorBot' && templateName !== 'moderator') {
+        logger.info(`Ensuring moderatorBot is also registered as 'moderator' template`);
+        botFactory.registerBotTemplate('moderator', template);
+      }
+    } catch (error) {
+      logger.error(`ERROR REGISTERING TEMPLATE ${dirName}:`, error);
     }
-    
-    if (registeredCount === 0) {
-      logger.warn('No templates were registered. Check the templates directory.');
-    }
-    
-  } catch (error) {
-    logger.error('Error loading template files', error);
+  }
+  
+  // Log registered templates
+  logger.info('REGISTERED TEMPLATES:', Array.from(botFactory.botTemplates.keys()));
+  logger.info('TEMPLATE DETAILS:');
+  for (const [name, template] of botFactory.botTemplates.entries()) {
+    logger.info(`- ${name}: ${template.name || name}`);
   }
   
   return registeredCount;
-}
-
-/**
- * Register legacy templates for backward compatibility
- * @param {Object} botFactory - Instance of the BotFactory class
- * @param {Array} templateDirs - Array of template directories already processed
- */
-function registerLegacyTemplates(botFactory, templateDirs) {
-  // Get the templates directory path
-  const templatesDir = path.join(__dirname);
-  
-  try {
-    // Read all JS files in the root templates directory (excluding index.js)
-    const legacyTemplateFiles = fs.readdirSync(templatesDir)
-      .filter(file => file !== 'index.js' && file.endsWith('.js'));
-    
-    if (legacyTemplateFiles.length > 0) {
-      logger.info(`Found ${legacyTemplateFiles.length} legacy template files`);
-      
-      // Register each legacy template
-      legacyTemplateFiles.forEach(file => {
-        try {
-          // Get template name from filename without extension
-          const templateName = path.basename(file, '.js');
-          
-          // Require the template file
-          const template = require(path.join(templatesDir, file));
-          
-          // Register the template if not already registered
-          if (!botFactory.botTemplates.has(templateName)) {
-            botFactory.registerBotTemplate(templateName, template);
-            logger.info(`Registered legacy bot template: ${templateName}`);
-          }
-        } catch (error) {
-          logger.error(`Failed to register legacy template ${file}`, error);
-        }
-      });
-    }
-  } catch (error) {
-    logger.error('Error loading legacy template files', error);
-  }
 }
 
 module.exports = registerTemplates; 

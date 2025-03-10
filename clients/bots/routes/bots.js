@@ -6,6 +6,7 @@ const router = express.Router();
 const { validateApiKey } = require('../middleware');
 const config = require('../config');
 const axios = require('axios');
+const { logger } = require('../utils');
 
 module.exports = (botFactory) => {
   /**
@@ -15,12 +16,12 @@ module.exports = (botFactory) => {
   router.get('/types', async (req, res) => {
     try {
       const templates = botFactory.getBotTemplates();
-      console.log('RAW TEMPLATES FROM BOT FACTORY FOR /types ENDPOINT:', templates);
+      logger.info('RAW TEMPLATES FROM BOT FACTORY FOR /types ENDPOINT:', templates);
       const types = [];
       
       // Convert the templates Map to an array of type objects
       for (const [type, template] of templates.entries()) {
-        console.log(`Processing template: ${type}`, template);
+        logger.info(`Processing template: ${type}`, template);
         types.push({
           id: type,
           name: template.name || type,
@@ -28,7 +29,7 @@ module.exports = (botFactory) => {
         });
       }
       
-      console.log('TYPES SENT TO CLIENT FROM /types ENDPOINT:', JSON.stringify(types, null, 2));
+      logger.info('TYPES SENT TO CLIENT FROM /types ENDPOINT:', JSON.stringify(types, null, 2));
       
       return res.status(200).json({
         success: true,
@@ -36,7 +37,7 @@ module.exports = (botFactory) => {
         types
       });
     } catch (error) {
-      console.error('Error fetching bot types:', error);
+      logger.error('Error fetching bot types:', error);
       return res.status(500).json({
         success: false,
         message: `Failed to fetch bot types: ${error.message}`
@@ -64,8 +65,8 @@ module.exports = (botFactory) => {
         // Check if we need to use a different endpoint for the main server
         const mainServerUrl = `${config.MAIN_SERVER_URL}/api/bots/service/register`;
         
-        console.log(`Attempting to register bot with main server at: ${mainServerUrl}`);
-        console.log(`Using API key: ${config.BOT_API_KEY}`);
+        logger.info(`Attempting to register bot with main server at: ${mainServerUrl}`);
+        logger.info(`Using API key: ${config.BOT_API_KEY}`);
         
         const mainServerResponse = await axios.post(
           mainServerUrl,
@@ -78,7 +79,7 @@ module.exports = (botFactory) => {
           }
         );
         
-        console.log('Main server response:', mainServerResponse.data);
+        logger.info('Main server response:', mainServerResponse.data);
         
         // If the main server registration was not successful, return the error
         if (!mainServerResponse.data.success) {
@@ -96,7 +97,7 @@ module.exports = (botFactory) => {
           botData.mainServerId = mainServerResponse.data.data.id;
         }
       } catch (error) {
-        console.error('Error calling main server for bot registration:', error);
+        logger.error('Error calling main server for bot registration:', error);
         return res.status(500).json({
           success: false,
           message: `Failed to register bot with main server: ${error.message}`
@@ -117,7 +118,7 @@ module.exports = (botFactory) => {
         }
       });
     } catch (error) {
-      console.error('Error registering bot:', error);
+      logger.error('Error registering bot:', error);
       return res.status(500).json({
         success: false,
         message: `Error registering bot: ${error.message}`
@@ -152,13 +153,6 @@ module.exports = (botFactory) => {
       const limit = parseInt(req.query.limit) || 10;
       
       const bots = botFactory.getActiveBots();
-      console.log(`RAW ACTIVE BOTS FROM BOT FACTORY: Found ${bots.length} bots`);
-      
-      // Log basic info about each bot without trying to stringify the whole object
-      bots.forEach((bot, index) => {
-        console.log(`Bot ${index + 1}: id=${bot.id || bot._id}, type=${bot.type}, username=${bot.username || bot.name}, status=${bot.status || 'active'}`);
-        console.log(`Bot ${index + 1} properties: ${getSerializableProperties(bot)}`);
-      });
       
       const totalCount = bots.length;
       
@@ -198,23 +192,6 @@ module.exports = (botFactory) => {
         return cleanBot;
       });
       
-      try {
-        console.log('BOTS RETURNED TO CLIENT:', JSON.stringify(botList, null, 2));
-        console.log('BOT TYPES BEING RETURNED:', botList.map(bot => bot.type).filter((v, i, a) => a.indexOf(v) === i));
-        
-        // Log field comparison for the first bot
-        if (botList.length > 0 && bots.length > 0) {
-          const originalKeys = Object.keys(bots[0]).filter(key => typeof bots[0][key] !== 'function');
-          const returnedKeys = Object.keys(botList[0]);
-          console.log(`ORIGINAL BOT FIELDS COUNT: ${originalKeys.length}, RETURNED FIELDS COUNT: ${returnedKeys.length}`);
-          console.log('FIELDS PRESERVED: ', returnedKeys.sort().join(', '));
-          console.log('FIELDS FILTERED OUT: ', originalKeys.filter(key => !returnedKeys.includes(key)).sort().join(', '));
-        }
-      } catch (stringifyError) {
-        console.error('Error stringifying bot list for debug logging:', stringifyError);
-        // Continue even if logging fails
-      }
-      
       return res.status(200).json({
         success: true,
         page,
@@ -223,7 +200,7 @@ module.exports = (botFactory) => {
         bots: botList
       });
     } catch (error) {
-      console.error('Error fetching bots:', error);
+      logger.error('Error fetching bots:', error);
       
       // Handle specific error for circular references
       let errorMessage = 'Failed to fetch bots';
@@ -270,7 +247,7 @@ module.exports = (botFactory) => {
             warning: errorMessage
           });
         } catch (fallbackError) {
-          console.error('Error in fallback handling:', fallbackError);
+          logger.error('Error in fallback handling:', fallbackError);
           // If the fallback also fails, continue to the error response below
         }
       }
@@ -289,7 +266,7 @@ module.exports = (botFactory) => {
   router.get('/templates', validateApiKey, (req, res) => {
     try {
       const templates = botFactory.getBotTemplates();
-      console.log('RAW TEMPLATES FROM BOT FACTORY:', templates);
+      logger.info('RAW TEMPLATES FROM BOT FACTORY:', templates);
       
       // Convert templates Map to array for API response
       const templateList = Array.from(templates.entries()).map(([key, template]) => ({
@@ -298,7 +275,7 @@ module.exports = (botFactory) => {
         description: template.description || 'No description available'
       }));
       
-      console.log('TEMPLATES SENT TO CLIENT:', JSON.stringify(templateList, null, 2));
+      logger.info('TEMPLATES SENT TO CLIENT:', JSON.stringify(templateList, null, 2));
       
       return res.status(200).json({
         success: true,
@@ -306,7 +283,7 @@ module.exports = (botFactory) => {
         templates: templateList
       });
     } catch (error) {
-      console.error('Error fetching bot templates:', error);
+      logger.error('Error fetching bot templates:', error);
       return res.status(500).json({
         success: false,
         message: `Error fetching bot templates: ${error.message}`
@@ -340,7 +317,7 @@ module.exports = (botFactory) => {
         }
       });
     } catch (error) {
-      console.error(`Error fetching bot ${req.params.id}:`, error);
+      logger.error(`Error fetching bot ${req.params.id}:`, error);
       return res.status(500).json({
         success: false,
         message: `Error fetching bot: ${error.message}`
@@ -367,12 +344,12 @@ module.exports = (botFactory) => {
         });
       }
       
-      console.log(`Updating bot ${botId} with data:`, updateData);
+      logger.info(`Updating bot ${botId} with data:`, updateData);
       
       // First, call the main server to update the bot
       try {
         const mainServerUrl = `${config.MAIN_SERVER_URL}/api/bots/service/bots/${botId}`;
-        console.log(`Attempting to update bot on main server at: ${mainServerUrl}`);
+        logger.info(`Attempting to update bot on main server at: ${mainServerUrl}`);
         
         const mainServerResponse = await axios.put(
           mainServerUrl,
@@ -385,7 +362,7 @@ module.exports = (botFactory) => {
           }
         );
         
-        console.log('Main server update response:', mainServerResponse.data);
+        logger.info('Main server update response:', mainServerResponse.data);
         
         // If the main server update was not successful, return the error
         if (!mainServerResponse.data.success) {
@@ -402,7 +379,7 @@ module.exports = (botFactory) => {
         // Now update the local bot instance with the data from the main server
         // This ensures the local bot exactly matches the source of truth
         if (Object.keys(updatedBot).length > 0) {
-          console.log(`Updating local bot with data from main server:`, updatedBot);
+          logger.info(`Updating local bot with data from main server:`, updatedBot);
           
           // Update all fields that came back from the main server
           Object.keys(updatedBot).forEach(key => {
@@ -412,7 +389,7 @@ module.exports = (botFactory) => {
           });
         } else {
           // Fallback to request data if main server didn't return updated bot data
-          console.log(`Main server didn't return updated bot data, using request data as fallback`);
+          logger.info(`Main server didn't return updated bot data, using request data as fallback`);
           Object.keys(updateData).forEach(key => {
             if (bot[key] !== undefined) {
               bot[key] = updateData[key];
@@ -432,7 +409,7 @@ module.exports = (botFactory) => {
               try {
                 await bot.connectToSocketServer();
               } catch (socketError) {
-                console.error(`Error connecting bot ${botId} to socket:`, socketError);
+                logger.error(`Error connecting bot ${botId} to socket:`, socketError);
               }
             }
           } else if (updateData.status !== 'active' && bot.status === 'active') {
@@ -444,7 +421,7 @@ module.exports = (botFactory) => {
               try {
                 bot.socket.disconnect();
               } catch (socketError) {
-                console.error(`Error disconnecting bot ${botId} from socket:`, socketError);
+                logger.error(`Error disconnecting bot ${botId} from socket:`, socketError);
               }
             }
           }
@@ -456,14 +433,14 @@ module.exports = (botFactory) => {
           data: updatedBot
         });
       } catch (mainServerError) {
-        console.error(`Error updating bot ${botId} on main server:`, mainServerError);
+        logger.error(`Error updating bot ${botId} on main server:`, mainServerError);
         return res.status(500).json({
           success: false,
           message: `Failed to update bot on main server: ${mainServerError.message}`
         });
       }
     } catch (error) {
-      console.error(`Error updating bot ${req.params.id}:`, error);
+      logger.error(`Error updating bot ${req.params.id}:`, error);
       return res.status(500).json({
         success: false,
         message: `Error updating bot: ${error.message}`
@@ -490,7 +467,7 @@ module.exports = (botFactory) => {
       // First, delete the bot from the main server
       try {
         const mainServerUrl = `${config.MAIN_SERVER_URL}/api/bots/service/bots/${botId}`;
-        console.log(`Attempting to delete bot from main server at: ${mainServerUrl}`);
+        logger.info(`Attempting to delete bot from main server at: ${mainServerUrl}`);
         
         const mainServerResponse = await axios.delete(
           mainServerUrl,
@@ -501,7 +478,7 @@ module.exports = (botFactory) => {
           }
         );
         
-        console.log('Main server delete response:', mainServerResponse.data);
+        logger.info('Main server delete response:', mainServerResponse.data);
         
         // If the main server deletion was not successful, return the error
         if (!mainServerResponse.data.success) {
@@ -520,14 +497,14 @@ module.exports = (botFactory) => {
           message: `Bot ${botId} has been shut down and removed from both main server and microservice`
         });
       } catch (mainServerError) {
-        console.error(`Error deleting bot ${botId} from main server:`, mainServerError);
+        logger.error(`Error deleting bot ${botId} from main server:`, mainServerError);
         return res.status(500).json({
           success: false,
           message: `Failed to delete bot from main server: ${mainServerError.message}`
         });
       }
     } catch (error) {
-      console.error(`Error shutting down bot ${req.params.id}:`, error);
+      logger.error(`Error shutting down bot ${req.params.id}:`, error);
       return res.status(500).json({
         success: false,
         message: `Error shutting down bot: ${error.message}`
@@ -542,14 +519,14 @@ module.exports = (botFactory) => {
    */
   router.get('/:id/status', (req, res) => {
     try {
-      console.log(`Received status request for bot: ${req.params.id}`);
+      logger.info(`Received status request for bot: ${req.params.id}`);
       
       const botId = req.params.id;
       const bot = botFactory.getBot(botId);
       
       // If the bot is not active, return a default status
       if (!bot) {
-        console.log(`Bot ${botId} not found, returning default status`);
+        logger.info(`Bot ${botId} not found, returning default status`);
         return res.status(200).json({
           id: botId,
           status: 'stopped',
@@ -569,7 +546,7 @@ module.exports = (botFactory) => {
       const memory = bot.memory || 0;
       const cpu = bot.cpu || 0;
       
-      console.log(`Returning status for active bot ${botId}`);
+      logger.info(`Returning status for active bot ${botId}`);
       return res.status(200).json({
         id: botId,
         status: 'running',
@@ -580,7 +557,7 @@ module.exports = (botFactory) => {
         lastError: bot.lastError || null
       });
     } catch (error) {
-      console.error(`Error fetching status for bot ${req.params.id}:`, error);
+      logger.error(`Error fetching status for bot ${req.params.id}:`, error);
       // Return a default status instead of an error to avoid client errors
       return res.status(200).json({
         id: req.params.id,
@@ -601,7 +578,7 @@ module.exports = (botFactory) => {
    */
   router.post('/:id/start', async (req, res) => {
     try {
-      console.log(`Received start request for bot: ${req.params.id}`);
+      logger.info(`Received start request for bot: ${req.params.id}`);
       
       const botId = req.params.id;
       
@@ -609,7 +586,7 @@ module.exports = (botFactory) => {
       let bot = botFactory.getBot(botId);
       
       if (bot) {
-        console.log(`Bot ${botId} is already running`);
+        logger.info(`Bot ${botId} is already running`);
         return res.status(200).json({
           success: true,
           message: `Bot ${botId} is already running`,
@@ -626,7 +603,7 @@ module.exports = (botFactory) => {
         const apiKey = process.env.BOT_API_KEY || config.BOT_API_KEY || 'dev-bot-api-key';
         const apiUrl = process.env.API_URL || config.API_URL || 'http://localhost:3000/api';
         
-        console.log(`Fetching bot ${botId} details from ${apiUrl}`);
+        logger.info(`Fetching bot ${botId} details from ${apiUrl}`);
         const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}`, {
           headers: {
             'x-api-key': apiKey
@@ -638,7 +615,7 @@ module.exports = (botFactory) => {
         }
         
         const botDetails = response.data.data || response.data.bot;
-        console.log(`Got bot details:`, botDetails);
+        logger.info(`Got bot details:`, botDetails);
         
         // Start the bot with the factory
         bot = await botFactory.startBot(botDetails.type || 'news', botDetails);
@@ -647,7 +624,7 @@ module.exports = (botFactory) => {
           throw new Error('Failed to start bot');
         }
         
-        console.log(`Successfully started bot ${botId}`);
+        logger.info(`Successfully started bot ${botId}`);
         return res.status(200).json({
           success: true,
           message: `Bot ${botId} started successfully`,
@@ -657,14 +634,14 @@ module.exports = (botFactory) => {
           }
         });
       } catch (activationError) {
-        console.error(`Error activating bot ${botId}:`, activationError);
+        logger.error(`Error activating bot ${botId}:`, activationError);
         return res.status(200).json({
           success: false,
           message: `Error starting bot: ${activationError.message}`
         });
       }
     } catch (error) {
-      console.error(`Error starting bot ${req.params.id}:`, error);
+      logger.error(`Error starting bot ${req.params.id}:`, error);
       return res.status(200).json({
         success: false,
         message: `Error starting bot: ${error.message}`
@@ -679,13 +656,13 @@ module.exports = (botFactory) => {
    */
   router.post('/:id/stop', async (req, res) => {
     try {
-      console.log(`Received stop request for bot: ${req.params.id}`);
+      logger.info(`Received stop request for bot: ${req.params.id}`);
       
       const botId = req.params.id;
       const bot = botFactory.getBot(botId);
       
       if (!bot) {
-        console.log(`Bot ${botId} is already stopped`);
+        logger.info(`Bot ${botId} is already stopped`);
         return res.status(200).json({
           success: true,
           message: `Bot ${botId} is already stopped`,
@@ -697,14 +674,14 @@ module.exports = (botFactory) => {
       }
       
       // Shutdown the bot
-      console.log(`Shutting down bot ${botId}`);
+      logger.info(`Shutting down bot ${botId}`);
       const result = await botFactory.shutdownBot(botId);
       
       if (!result) {
         throw new Error('Failed to stop bot');
       }
       
-      console.log(`Successfully stopped bot ${botId}`);
+      logger.info(`Successfully stopped bot ${botId}`);
       return res.status(200).json({
         success: true,
         message: `Bot ${botId} stopped successfully`,
@@ -714,7 +691,7 @@ module.exports = (botFactory) => {
         }
       });
     } catch (error) {
-      console.error(`Error stopping bot ${req.params.id}:`, error);
+      logger.error(`Error stopping bot ${req.params.id}:`, error);
       return res.status(200).json({
         success: false,
         message: `Error stopping bot: ${error.message}`
@@ -729,14 +706,14 @@ module.exports = (botFactory) => {
    */
   router.post('/:id/restart', async (req, res) => {
     try {
-      console.log(`Received restart request for bot: ${req.params.id}`);
+      logger.info(`Received restart request for bot: ${req.params.id}`);
       
       const botId = req.params.id;
       let bot = botFactory.getBot(botId);
       
       // If bot is running, stop it first
       if (bot) {
-        console.log(`Stopping bot ${botId} before restart`);
+        logger.info(`Stopping bot ${botId} before restart`);
         await botFactory.shutdownBot(botId);
       }
       
@@ -746,7 +723,7 @@ module.exports = (botFactory) => {
         const apiKey = process.env.BOT_API_KEY || config.BOT_API_KEY || 'dev-bot-api-key';
         const apiUrl = process.env.API_URL || config.API_URL || 'http://localhost:3000/api';
         
-        console.log(`Fetching bot ${botId} details from ${apiUrl}`);
+        logger.info(`Fetching bot ${botId} details from ${apiUrl}`);
         const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}`, {
           headers: {
             'x-api-key': apiKey
@@ -758,7 +735,7 @@ module.exports = (botFactory) => {
         }
         
         const botDetails = response.data.data || response.data.bot;
-        console.log(`Got bot details:`, botDetails);
+        logger.info(`Got bot details:`, botDetails);
         
         // Start the bot with the factory
         bot = await botFactory.startBot(botDetails.type || 'news', botDetails);
@@ -767,7 +744,7 @@ module.exports = (botFactory) => {
           throw new Error('Failed to restart bot');
         }
         
-        console.log(`Successfully restarted bot ${botId}`);
+        logger.info(`Successfully restarted bot ${botId}`);
         return res.status(200).json({
           success: true,
           message: `Bot ${botId} restarted successfully`,
@@ -777,14 +754,14 @@ module.exports = (botFactory) => {
           }
         });
       } catch (activationError) {
-        console.error(`Error reactivating bot ${botId}:`, activationError);
+        logger.error(`Error reactivating bot ${botId}:`, activationError);
         return res.status(200).json({
           success: false,
           message: `Error restarting bot: ${activationError.message}`
         });
       }
     } catch (error) {
-      console.error(`Error restarting bot ${req.params.id}:`, error);
+      logger.error(`Error restarting bot ${req.params.id}:`, error);
       return res.status(200).json({
         success: false,
         message: `Error restarting bot: ${error.message}`
@@ -839,7 +816,7 @@ module.exports = (botFactory) => {
         data: metrics
       });
     } catch (error) {
-      console.error(`Error fetching metrics for bot ${req.params.id}:`, error);
+      logger.error(`Error fetching metrics for bot ${req.params.id}:`, error);
       return res.status(200).json({
         success: false,
         message: `Error fetching bot metrics: ${error.message}`
@@ -881,7 +858,7 @@ module.exports = (botFactory) => {
         logs: limitedLogs
       });
     } catch (error) {
-      console.error(`Error fetching logs for bot ${req.params.id}:`, error);
+      logger.error(`Error fetching logs for bot ${req.params.id}:`, error);
       return res.status(200).json({
         success: false,
         message: `Error fetching bot logs: ${error.message}`,

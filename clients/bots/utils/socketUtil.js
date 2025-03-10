@@ -7,6 +7,7 @@
 
 const { io } = require('socket.io-client');
 const axios = require('axios');
+const logger = require('./logger');
 
 // Get configuration
 const MAIN_SERVER_URL = process.env.MAIN_SERVER_URL || 'http://localhost:3000';
@@ -22,35 +23,46 @@ const addSocketCapability = (botInstance) => {
   // Get authentication token for the bot
   const getAuthToken = async () => {
     try {
-      console.log(`Getting auth token for bot ${botInstance.username} (${botInstance.id})`);
+      logger.info(`Getting auth token for bot ${botInstance.username} (${botInstance.id})`);
+      
+      // If the bot already has an authToken property, use it
+      if (botInstance.authToken) {
+        logger.info(`Bot ${botInstance.username} already has an auth token, using it`);
+        return botInstance.authToken;
+      }
       
       // Skip authentication attempt if the bot doesn't have an API key
-      if (!botInstance.apiKey) {
-        console.warn(`Bot ${botInstance.username} has no API key, cannot authenticate`);
+      if (!botInstance.apiKey && !BOT_API_KEY) {
+        logger.warn(`Bot ${botInstance.username} has no API key, cannot authenticate`);
         return null;
       }
+      
+      // Use the bot's API key or the environment variable
+      const apiKey = botInstance.apiKey || BOT_API_KEY;
       
       const response = await axios.post(
         `${MAIN_SERVER_URL}/api/bots/authenticate`,
         {
           botId: botInstance.id,
-          apiKey: botInstance.apiKey
+          apiKey: apiKey
         }
       );
       
       if (response.data.success && response.data.token) {
-        console.log(`Bot ${botInstance.username} received auth token`);
+        logger.info(`Bot ${botInstance.username} received auth token`);
+        // Store the token on the bot instance for future use
+        botInstance.authToken = response.data.token;
         return response.data.token;
       } else {
-        console.error(`Failed to get auth token for bot ${botInstance.username}:`, response.data);
+        logger.error(`Failed to get auth token for bot ${botInstance.username}:`, response.data);
         return null;
       }
     } catch (error) {
       // If authentication fails because the bot is not active, log a specific message
       if (error.response && error.response.status === 403) {
-        console.warn(`Bot ${botInstance.username} is not active yet, socket connection will be attempted when activated`);
+        logger.warn(`Bot ${botInstance.username} is not active yet, socket connection will be attempted when activated`);
       } else {
-        console.error(`Error getting auth token for bot ${botInstance.username}:`, error.message);
+        logger.error(`Error getting auth token for bot ${botInstance.username}:`, error.message);
       }
       return null;
     }
@@ -60,18 +72,18 @@ const addSocketCapability = (botInstance) => {
   const connectToSocketServer = async () => {
     // Only try to connect if bot is in active status
     if (botInstance.status !== 'active') {
-      console.warn(`Bot ${botInstance.username} is not active (status: ${botInstance.status}), skipping socket connection`);
+      logger.warn(`Bot ${botInstance.username} is not active (status: ${botInstance.status}), skipping socket connection`);
       return null;
     }
     
     const token = await getAuthToken();
     if (!token) {
-      console.error(`Cannot connect bot ${botInstance.username} to socket: No auth token available`);
+      logger.error(`Cannot connect bot ${botInstance.username} to socket: No auth token available`);
       return null;
     }
 
-    console.log(`Creating socket connection for bot ${botInstance.username} to ${MAIN_SERVER_URL}`);
-    console.log(`Bot connection details: ID=${botInstance.id}, Username=${botInstance.username}, TokenLength=${token.length}`);
+    logger.info(`Creating socket connection for bot ${botInstance.username} to ${MAIN_SERVER_URL}`);
+    logger.info(`Bot connection details: ID=${botInstance.id}, Username=${botInstance.username}, TokenLength=${token.length}`);
     
     // Create socket instance with debugging
     const socket = io(MAIN_SERVER_URL, {
@@ -85,7 +97,8 @@ const addSocketCapability = (botInstance) => {
       forceNew: true, // Force a new connection
       query: {
         botId: botInstance.id,
-        botUsername: botInstance.username
+        botUsername: botInstance.username,
+        token: token // Add token to the query parameters
       },
       // Enable debug logs for development
       ...(process.env.NODE_ENV === 'development' ? { debug: true } : {})
@@ -93,44 +106,45 @@ const addSocketCapability = (botInstance) => {
 
     // Set up event logging for debugging
     socket.onAny((event, ...args) => {
-      console.log(`[SOCKET EVENT] Bot ${botInstance.username} - Event: ${event}`);
+      logger.info(`[SOCKET EVENT] Bot ${botInstance.username} - Event: ${event}`);
     });
 
     // Set up basic event handlers
     socket.on('connect', () => {
-      console.log(`Bot ${botInstance.username} connected to socket server with ID ${socket.id}`);
+      logger.info(`Bot ${botInstance.username} connected to socket server with ID ${socket.id}`);
       
       // Authenticate the socket connection
-      console.log(`Authenticating bot ${botInstance.username} with socket...`);
+      logger.info(`Authenticating bot ${botInstance.username} with socket...`);
       socket.emit('authenticate', {
         token,
         username: botInstance.username,
-        userId: botInstance.id
+        userId: botInstance.id,
+        botId: botInstance.id // Ensure botId is included
       });
     });
 
     socket.on('authenticated', (data) => {
-      console.log(`Bot ${botInstance.username} authentication response:`, JSON.stringify(data));
+      logger.info(`Bot ${botInstance.username} authentication response:`, JSON.stringify(data));
       botInstance.socketAuthenticated = data.success;
       
       if (data.success) {
-        console.log(`Bot ${botInstance.username} successfully authenticated with socket server!`);
+        logger.info(`Bot ${botInstance.username} successfully authenticated with socket server!`);
       } else {
-        console.error(`Bot ${botInstance.username} failed to authenticate with socket server:`, data.error);
+        logger.error(`Bot ${botInstance.username} failed to authenticate with socket server:`, data.error);
       }
     });
 
     socket.on('connect_error', (error) => {
-      console.error(`Bot ${botInstance.username} socket connection error:`, error.message);
-      console.error(`Connection details: URL=${MAIN_SERVER_URL}, Transport=${socket.io.engine.transport.name}`);
+      logger.error(`Bot ${botInstance.username} socket connection error:`, error.message);
+      logger.error(`Connection details: URL=${MAIN_SERVER_URL}, Transport=${socket.io.engine.transport.name}`);
     });
 
     socket.on('error', (error) => {
-      console.error(`Bot ${botInstance.username} socket error:`, error);
+      logger.error(`Bot ${botInstance.username} socket error:`, error);
     });
 
     socket.on('disconnect', (reason) => {
-      console.log(`Bot ${botInstance.username} disconnected from socket:`, reason);
+      logger.info(`Bot ${botInstance.username} disconnected from socket:`, reason);
       botInstance.socketAuthenticated = false;
     });
 
@@ -152,7 +166,7 @@ const addSocketCapability = (botInstance) => {
     });
 
     // Connect to the server
-    console.log(`Attempting to connect bot ${botInstance.username} to socket server...`);
+    logger.info(`Attempting to connect bot ${botInstance.username} to socket server...`);
     socket.connect();
     
     return socket;
@@ -166,16 +180,16 @@ const addSocketCapability = (botInstance) => {
   botInstance.connectToSocketServer = async () => {
     // If the bot isn't active, just log a message and return
     if (botInstance.status !== 'active') {
-      console.log(`Bot ${botInstance.username} is not active (status: ${botInstance.status}), cannot connect to socket`);
+      logger.info(`Bot ${botInstance.username} is not active (status: ${botInstance.status}), cannot connect to socket`);
       return null;
     }
     
     if (botInstance.socket && botInstance.socket.connected) {
-      console.log(`Bot ${botInstance.username} already connected to socket server`);
+      logger.info(`Bot ${botInstance.username} already connected to socket server`);
       return botInstance.socket;
     }
     
-    console.log(`Connecting bot ${botInstance.username} to socket server...`);
+    logger.info(`Connecting bot ${botInstance.username} to socket server...`);
     botInstance.socket = await connectToSocketServer();
     
     // Set up message handlers if socket was created successfully
@@ -189,12 +203,12 @@ const addSocketCapability = (botInstance) => {
         'chatMessage'         // Chat message in a room
       ];
       
-      console.log(`Setting up message listeners for bot ${botInstance.username}...`);
+      logger.info(`Setting up message listeners for bot ${botInstance.username}...`);
       
       // Set up handlers for all message events
       messageEvents.forEach(eventName => {
         botInstance.socket.on(eventName, (data) => {
-          console.log(`Bot ${botInstance.username} received ${eventName}:`, data);
+          logger.info(`Bot ${botInstance.username} received ${eventName}`);
           
           // Use the processSocketMessage handler if available
           if (typeof botInstance.processSocketMessage === 'function') {
@@ -207,19 +221,19 @@ const addSocketCapability = (botInstance) => {
       
       // Also listen for other important events
       botInstance.socket.on('notification', (data) => {
-        console.log(`Bot ${botInstance.username} received notification:`, data);
+        logger.info(`Bot ${botInstance.username} received notification:`, data);
       });
       
       botInstance.socket.on('userOnline', (data) => {
-        console.log(`Bot ${botInstance.username} received userOnline event:`, data);
+        logger.info(`Bot ${botInstance.username} received userOnline event:`, data);
       });
       
       botInstance.socket.on('userOffline', (data) => {
-        console.log(`Bot ${botInstance.username} received userOffline event:`, data);
+        logger.info(`Bot ${botInstance.username} received userOffline event:`, data);
       });
       
       botInstance.socket.on('userTyping', (data) => {
-        console.log(`Bot ${botInstance.username} received userTyping event:`, data);
+        logger.info(`Bot ${botInstance.username} received userTyping event:`, data);
       });
     }
     
@@ -232,7 +246,7 @@ const addSocketCapability = (botInstance) => {
       botInstance.socket.disconnect();
       botInstance.socket = null;
       botInstance.socketAuthenticated = false;
-      console.log(`Bot ${botInstance.username} disconnected from socket server`);
+      logger.info(`Bot ${botInstance.username} disconnected from socket server`);
       return true;
     }
     return false;
@@ -241,12 +255,12 @@ const addSocketCapability = (botInstance) => {
   // Send message via socket
   botInstance.sendSocketMessage = (message, recipient = null) => {
     if (!botInstance.socket || !botInstance.socket.connected) {
-      console.error(`Bot ${botInstance.username} not connected to socket server`);
+      logger.error(`Bot ${botInstance.username} not connected to socket server`);
       return false;
     }
     
     if (!botInstance.socketAuthenticated) {
-      console.error(`Bot ${botInstance.username} not authenticated on socket server`);
+      logger.error(`Bot ${botInstance.username} not authenticated on socket server`);
       return false;
     }
     
@@ -261,14 +275,14 @@ const addSocketCapability = (botInstance) => {
       timestamp: Date.now()
     });
     
-    console.log(`Bot ${botInstance.username} sent socket message:`, message);
+    logger.info(`Bot ${botInstance.username} sent socket message:`, message);
     return true;
   };
   
   // Default socket message processor if not provided by bot
   if (!botInstance.processSocketMessage) {
     botInstance.processSocketMessage = (data) => {
-      console.log(`Bot ${botInstance.username} received message:`, data);
+      logger.info(`Bot ${botInstance.username} received message`);
       // Default implementation doesn't respond
     };
   }

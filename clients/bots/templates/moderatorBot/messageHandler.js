@@ -4,6 +4,11 @@
  */
 const { logger } = require('../../utils');
 const moderationService = require('./moderationService');
+const axios = require('axios');
+
+// API configuration
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api';
+const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
 
 /**
  * Process incoming messages
@@ -12,22 +17,29 @@ const moderationService = require('./moderationService');
  * @returns {Object} - Processing result
  */
 async function processMessage(message, bot) {
-  logger.debug(`Moderator bot received message from ${message.sender}`, message);
+  logger.debug(`Moderator bot received message from ${message.sender}`);
   
-  // Extract the message content
-  const content = message.content || '';
+  // Extract the message content and ID
+  const content = message.content || message.text || '';
+  const messageId = message.id || message.messageId;
+  const sender = message.sender || message.username;
+  
+  // Skip processing if no content or if the message is from the bot itself
+  if (!content || sender === bot.username) {
+    return { handled: false };
+  }
   
   // Check if this is a command for the moderator bot
   if (isModeratorCommand(content)) {
-    return handleModeratorCommand(content, message.sender, bot);
+    return handleModeratorCommand(content, sender, bot);
   }
   
   // Moderate the content
-  const moderationResult = await bot.moderateContent(content, message.sender);
+  const moderationResult = await bot.moderateContent(content, sender);
   
   // Take action based on moderation result
   if (moderationResult.actionTaken) {
-    return handleModerationAction(moderationResult, message.sender, bot);
+    return handleModerationAction(moderationResult, message, bot);
   }
   
   // Default response if no action needed
@@ -97,20 +109,41 @@ function formatSettings(config) {
 /**
  * Handle moderation action
  * @param {Object} result - Moderation result
- * @param {string} sender - Message sender
+ * @param {Object} message - Original message
  * @param {Object} bot - Bot instance
  * @returns {Object} - Handling result
  */
-async function handleModerationAction(result, sender, bot) {
-  // If content was rejected, notify the sender
+async function handleModerationAction(result, message, bot) {
+  const sender = message.sender || message.username;
+  const messageId = message.id || message.messageId;
+  
+  // If content was rejected, delete the message and notify the sender
   if (result.rejected) {
-    await bot.sendMessage('Your message was blocked by the moderation system. Please review our community guidelines.', sender);
-    return { handled: true, moderated: true, rejected: true };
+    // Delete the message via API
+    const deleteResult = await deleteMessage(messageId, sender);
+    
+    if (deleteResult.success) {
+      await bot.sendMessage('Your message was deleted by the moderation system for violating our community guidelines.', sender);
+      
+      // Log the deletion
+      logger.info(`Deleted message from ${sender} due to moderation flags: ${result.flags.join(', ')}`);
+      
+      // Notify all users about the moderation action
+      await broadcastModeration(bot, `A message from ${sender} was removed for violating our community guidelines.`);
+      
+      return { handled: true, moderated: true, rejected: true, deleted: true };
+    } else {
+      logger.error(`Failed to delete message ${messageId}: ${deleteResult.error}`);
+    }
   }
   
   // If content was modified, notify the sender
   if (result.moderated !== result.original) {
-    await bot.sendMessage('Your message was modified by the moderation system to comply with our community guidelines.', sender);
+    await bot.sendMessage('Your message was flagged by our moderation system. Please review our community guidelines.', sender);
+    
+    // Log the moderation
+    logger.info(`Flagged message from ${sender} with moderation flags: ${result.flags.join(', ')}`);
+    
     return { handled: true, moderated: true, modified: true };
   }
   
@@ -122,6 +155,68 @@ async function handleModerationAction(result, sender, bot) {
   }
   
   return { handled: true, moderated: true };
+}
+
+/**
+ * Delete a message via the API
+ * @param {string} messageId - ID of the message to delete
+ * @param {string} username - Username of the message sender
+ * @returns {Object} - Result of the deletion
+ */
+async function deleteMessage(messageId, username) {
+  try {
+    // Make API call to delete the message
+    const response = await axios({
+      method: 'DELETE',
+      url: `${API_BASE_URL}/messages/${messageId}`,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY
+      },
+      data: {
+        username: username
+      }
+    });
+    
+    return {
+      success: true,
+      data: response.data
+    };
+  } catch (error) {
+    logger.error('Error deleting message:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Broadcast a moderation notification to all users
+ * @param {Object} bot - Bot instance
+ * @param {string} message - Message to broadcast
+ */
+async function broadcastModeration(bot, message) {
+  try {
+    // Use the system message API to broadcast
+    await axios({
+      method: 'POST',
+      url: `${API_BASE_URL}/messages/system`,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': BOT_API_KEY
+      },
+      data: {
+        message: message,
+        sender: bot.username,
+        isSystemMessage: true
+      }
+    });
+    
+    logger.debug('Broadcast moderation notification:', message);
+  } catch (error) {
+    logger.error('Error broadcasting moderation notification:', error.message);
+  }
 }
 
 module.exports = {

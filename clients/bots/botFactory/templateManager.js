@@ -7,6 +7,8 @@
  * - Validating templates
  */
 
+const { logger } = require('../utils');
+
 /**
  * Register a new bot template
  * @param {Map} botTemplates - Reference to the templates collection
@@ -15,11 +17,11 @@
  */
 function registerBotTemplate(botTemplates, type, template) {
   if (botTemplates.has(type)) {
-    console.warn(`Bot template "${type}" already exists, overwriting`);
+    logger.warn(`Bot template "${type}" already exists, overwriting`);
   }
   
   botTemplates.set(type, template);
-  console.log(`Registered bot template: ${type}`);
+  logger.info(`Registered bot template: ${type}`);
 }
 
 /**
@@ -33,8 +35,8 @@ function getBotTemplate(botTemplates, type, validate = false) {
   const template = botTemplates.get(type);
   
   if (validate) {
-    console.log(`Looking for bot template: "${type}"`);
-    console.log(`Available templates: ${Array.from(botTemplates.keys()).join(', ') || 'none'}`);
+    logger.info(`Looking for bot template: "${type}"`);
+    logger.info(`Available templates: ${Array.from(botTemplates.keys()).join(', ') || 'none'}`);
     
     if (!template) {
       throw new Error(`Bot template "${type}" not found`);

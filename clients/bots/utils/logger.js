@@ -3,6 +3,35 @@
  */
 const config = require('../config');
 
+// ANSI color codes for terminal output
+const COLORS = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  underscore: '\x1b[4m',
+  blink: '\x1b[5m',
+  reverse: '\x1b[7m',
+  hidden: '\x1b[8m',
+  
+  black: '\x1b[30m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  
+  bgBlack: '\x1b[40m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m',
+  bgWhite: '\x1b[47m'
+};
+
 // Log levels
 const LOG_LEVELS = {
   debug: 0,
@@ -14,16 +43,25 @@ const LOG_LEVELS = {
 // Current log level from config
 const CURRENT_LEVEL = LOG_LEVELS[config.LOG_LEVEL || 'info'];
 
+// Color mapping for log levels
+const LEVEL_COLORS = {
+  debug: COLORS.cyan,
+  info: COLORS.green,
+  warn: COLORS.yellow,
+  error: COLORS.red
+};
+
 /**
- * Format a log message
+ * Format a log message with colors
  * @param {string} level - Log level
  * @param {string} message - Log message
  * @param {Object} data - Additional data to log
- * @returns {string} - Formatted log message
+ * @returns {string} - Formatted log message with colors
  */
 function formatLog(level, message, data) {
   const timestamp = new Date().toISOString();
-  const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
+  const levelColor = LEVEL_COLORS[level] || COLORS.white;
+  const prefix = `${COLORS.dim}[${timestamp}]${COLORS.reset} ${levelColor}[${level.toUpperCase()}]${COLORS.reset}`;
   
   if (data) {
     return `${prefix} ${message} ${JSON.stringify(data, null, 2)}`;

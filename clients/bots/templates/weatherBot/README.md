@@ -1,42 +1,100 @@
 # Weather Bot
 
-A bot that provides weather information for locations mentioned in natural language.
+A bot that provides real-time weather alerts for severe weather conditions using the OpenWeatherMap Global Weather Alerts API.
 
 ## Features
 
-- Extracts location names from user queries using Compromise.js natural language processing
-- Geocodes locations to coordinates using OpenStreetMap
-- Provides current weather conditions, temperature, humidity, and forecast
-- Responds to weather queries in natural language
+- Receives weather alerts through a webhook at `/api/weather/alerts`
+- Processes and formats alerts with appropriate icons based on alert type
+- Filters alerts based on severity threshold
+- In-memory tracking of processed alerts to prevent duplicates
+- Simple webhook-based architecture with no database dependencies
 
-## Files
+## Installation
 
-- `index.js` - Main bot template configuration and initialization
-- `weatherService.js` - Handles fetching weather data for locations
-- `messageHandler.js` - Processes incoming messages and responds to queries
+No additional installation is needed beyond the main application dependencies. The Weather Bot is integrated into the main application.
 
 ## Configuration
 
-The weather bot accepts the following configuration parameters:
+The bot can be configured with the following options:
 
-```javascript
+- `apiKey`: OpenWeatherMap API key
+- `minSeverity`: Minimum severity level to report (Extreme, Severe, Moderate, Minor, Unknown)
+- `debugMode`: Enable debug mode for testing
+
+## Usage
+
+The Weather Bot works in webhook mode only. It receives alerts directly from OpenWeatherMap's Global Weather Alerts push service.
+
+### Webhook Mode Setup
+
+1. Subscribe to OpenWeatherMap's Global Weather Alerts service
+2. Configure your subscription to send alerts to your server's `/api/weather/alerts` endpoint
+3. The bot will process incoming alerts and publish them to the platform
+
+## Alert Structure
+
+The bot expects incoming alerts in the following format:
+
+```json
 {
-  weatherApiKey: "your-api-key", // For real weather API integration
-  defaultUnits: "imperial",      // imperial or metric
-  debugMode: false               // Enable debug mode
+  "alert": {
+    "id": "unique-alert-id",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[[lon1, lat1], [lon2, lat2], ...]]
+    }
+  },
+  "msg_type": "warning",
+  "categories": ["Met"],
+  "urgency": "Expected",
+  "severity": "Moderate",
+  "certainty": "Likely",
+  "start": 1646739000,
+  "end": 1646824080,
+  "sender": "NWS Charleston (West Virginia)",
+  "description": [
+    {
+      "language": "En",
+      "event": "Flood Warning",
+      "headline": "Flood Warning issued...",
+      "description": "...FLOOD WARNING NOW IN EFFECT...",
+      "instruction": "Turn around, don't drown..."
+    }
+  ]
 }
 ```
 
-## Example Usage
+## Icons
 
-When the bot receives messages, it will analyze them for weather-related queries:
+The bot automatically assigns appropriate icons to different types of weather alerts to make them more visually identifiable:
 
-User: "What's the weather like in Tokyo?"
-Bot: "The weather in Tokyo is currently partly cloudy with a temperature of 65°F. Humidity is 45% with wind speed of 10 mph. Similar conditions expected for the next few days."
+- 🌪️ Tornado warnings
+- ⛈️ Thunderstorm alerts
+- 🌊 Flood warnings
+- ❄️ Winter storm alerts
+- 🔥 Heat/fire warnings
+- And many more...
 
-User: "Will it rain in New York tomorrow?"
-Bot: "The weather in New York is currently cloudy with a temperature of 58°F. Humidity is 75% with wind speed of 8 mph. Similar conditions expected for the next few days."
+## Development & Testing
 
-## Implementation Notes
+For testing purposes, use the mock alert endpoint:
 
-Currently, the bot uses a mock weather service. For production implementation, connect to a real weather API such as OpenWeatherMap. 
+```
+POST /api/weather/mock-alert
+```
+
+This will generate a random weather alert for a location and process it through the system.
+
+## Memory Management
+
+Processed alerts are stored in memory to prevent duplicate processing. This is implemented using a Set data structure for efficient lookups.
+
+## API Endpoints
+
+- `POST /api/weather/alerts`: Main webhook endpoint for receiving alerts
+- `POST /api/weather/mock-alert`: Generate and process a mock alert (development only)
+
+## Integration with Main Application
+
+The Weather Bot connects to the main application through the webhook router and the standard bot initialization process. When the application starts, it initializes the bot with the appropriate configuration. 

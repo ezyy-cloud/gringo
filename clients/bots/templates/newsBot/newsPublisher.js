@@ -146,27 +146,47 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
         logger.info(`Preparing image upload with content type: ${fileType}, size: ${fileSize} bytes`);
         
         // Get authentication token
-        const authToken = bot.authToken;
+        let authToken = bot.authToken;
         const apiKey = bot.apiKey || process.env.BOT_API_KEY || 'dev-bot-api-key';
         
         if (!authToken) {
           logger.warn('No auth token available, attempting to authenticate');
           if (typeof bot.authenticate === 'function') {
-            await bot.authenticate();
+            const authenticated = await bot.authenticate();
+            if (!authenticated) {
+              logger.error('Authentication failed');
+              throw new Error('Authentication failed - could not get token');
+            }
+            authToken = bot.authToken;
           } else {
-            logger.error('Bot does not have authenticate method');
-            throw new Error('Authentication failed - no token and no authenticate method');
+            // Try to get a token from authService directly
+            try {
+              const auth = await authService.authenticateBot(bot._id, apiKey);
+              if (auth && auth.success && auth.token) {
+                authToken = auth.token;
+                bot.authToken = authToken; // Store for future use
+              } else {
+                logger.error('Authentication failed via authService');
+                throw new Error('Authentication failed - no token and authentication service failed');
+              }
+            } catch (authError) {
+              logger.error(`Error authenticating via authService: ${authError.message}`);
+              throw new Error('Authentication failed - authService error');
+            }
           }
         }
         
-        // Make sure we're using the latest token after possible authentication
-        const tokenToUse = bot.authToken;
+        // Make sure we have a token after authentication attempts
+        if (!authToken) {
+          logger.error('Failed to obtain authentication token after all attempts');
+          throw new Error('Authentication failed - could not obtain token');
+        }
         
-        logger.info('Using bot.authToken for authentication');
+        logger.info('Using authentication token for request');
         
         // Make the API request
         logger.info(`Sending post request to: ${apiUrl}`);
-        logger.info(`Request headers: Auth=${tokenToUse ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
+        logger.info(`Request headers: Auth=${authToken ? 'Present' : 'Missing'}, API Key=${apiKey ? 'Present' : 'Missing'}`);
         
         // Extract message content from newsItem 
         const messageText = typeof newsItem.formattedContent === 'string' 
@@ -210,7 +230,7 @@ async function postNewsWithImage(bot, newsItem, imageUrl) {
         const response = await axios.post(apiUrl, directForm, {
           headers: {
             ...directForm.getHeaders(),
-            'Authorization': `Bearer ${tokenToUse}`,
+            'Authorization': `Bearer ${authToken}`,
             'X-API-Key': apiKey
           }
         });

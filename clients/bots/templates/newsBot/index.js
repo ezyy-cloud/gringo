@@ -25,6 +25,11 @@
  *    - Added DEV_MODE check to avoid real API calls during testing
  *    - Mock response support for local testing
  *    - Improved cleanup of temporary files
+ *
+ * 5. API Efficiency
+ *    - Now fetches news for 5 countries at once instead of one by one
+ *    - Reduces API calls and improves rate limit handling
+ *    - More efficient use of daily API credits
  * 
  * Features:
  * - Fetches breaking news from NewsData.io API (https://newsdata.io) with advanced filtering

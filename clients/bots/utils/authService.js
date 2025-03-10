@@ -5,29 +5,17 @@
  * - Handles authentication with the main server
  * - Caches authentication tokens
  * - Refreshes expired tokens
- * - Provides fallback to mock auth for development
  */
 
 const axios = require('axios');
-
-// Use a standalone logger to avoid circular dependencies
-const logger = {
-  info: (msg, ...args) => console.log(`[INFO] ${msg}`, ...args),
-  error: (msg, ...args) => console.error(`[ERROR] ${msg}`, ...args),
-  warn: (msg, ...args) => console.warn(`[WARN] ${msg}`, ...args),
-  debug: (msg, ...args) => process.env.DEBUG === 'true' ? console.log(`[DEBUG] ${msg}`, ...args) : null
-};
+const logger = require('./logger');
 
 // Configuration
 const API_URL = process.env.MAIN_SERVER_URL || 'https://api.gringo.ezyy.cloud';
-const BOT_API_KEY = process.env.BOT_API_KEY || 'dev-bot-api-key';
-const USE_MOCK_AUTH = process.env.MOCK_AUTH === 'true';
 const API_KEY = process.env.BOT_API_KEY || process.env.API_KEY;
 
-// Default expiry times (in milliseconds)
+// Default expiry time (in milliseconds)
 const DEFAULT_TOKEN_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-const MOCK_TOKEN_EXPIRY = 60 * 60 * 1000;         // 1 hour
-const ERROR_TOKEN_EXPIRY = 30 * 60 * 1000;        // 30 minutes
 
 // Token cache to avoid frequent auth requests
 // Structure: { botId: { token: 'token', expiry: timestamp } }
@@ -50,125 +38,62 @@ function createResponse(success, token = null, error = null) {
 }
 
 /**
- * Create a mock authentication token for testing and development
- * 
- * @param {string} botId - The bot's ID
- * @param {number} [expiry=MOCK_TOKEN_EXPIRY] - How long the token should be valid (ms)
- * @returns {Object} Authentication response with mock token
- */
-function createMockToken(botId, expiry = MOCK_TOKEN_EXPIRY) {
-  if (!botId) {
-    return createResponse(false, null, 'Cannot create mock token: Missing botId');
-  }
-  
-  try {
-    const mockToken = `mock_token_${botId}_${Date.now()}`;
-    
-    // Cache the mock token
-    tokenCache.set(botId, {
-      token: mockToken,
-      expiry: Date.now() + expiry
-    });
-    
-    logger.info(`Created mock authentication token for bot ${botId}`);
-    return createResponse(true, mockToken);
-  } catch (error) {
-    logger.error(`Error creating mock token: ${error?.message || 'Unknown error'}`);
-    return createResponse(false, null, `Failed to create mock token: ${error?.message || 'Unknown error'}`);
-  }
-}
-
-/**
- * Authenticate a bot with the server
- * @param {string} botId - The bot's unique identifier
- * @param {string} apiKey - The API key for authentication
- * @param {boolean} forceRefresh - Force refresh the token even if one exists
- * @returns {Promise<Object>} - Response containing success status, token and error if any
+ * Authenticate a bot with the main server
+ * @param {string} botId - The bot ID to authenticate
+ * @param {string} apiKey - The API key to use for authentication
+ * @param {boolean} forceRefresh - Whether to force a refresh of the token
+ * @returns {Promise<Object>} - Authentication result
  */
 async function authenticateBot(botId, apiKey, forceRefresh = false) {
-  if (!botId) {
-    console.warn('[AuthService] Missing botId in authenticateBot call');
-    return createResponse(false, null, 'Missing botId');
-  }
-
-  // Use the provided API key or fallback to the environment variable
-  const effectiveApiKey = apiKey || BOT_API_KEY;
-  
-  if (!effectiveApiKey) {
-    console.warn('[AuthService] No API key available for authentication');
-    return createResponse(false, null, 'Missing API key');
-  }
-
-  // Check if we have a cached token that's not expired and not forcing refresh
-  if (!forceRefresh && tokenCache.has(botId)) {
-    const cachedAuth = tokenCache.get(botId);
-    
-    // Check if token is still valid (not expired)
-    if (cachedAuth && cachedAuth.expiry > Date.now()) {
-      logger.debug(`Using cached auth token for bot ${botId}`);
-      return createResponse(true, cachedAuth.token);
-    }
-    
-    // Token expired, remove from cache
-    tokenCache.delete(botId);
-    logger.debug(`Removed expired token for bot ${botId}`);
-  }
-
-  // For development/testing environments, use mock authentication
-  // Only use mock auth if explicitly allowed or in development/test mode
-  if ((process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.MOCK_AUTH === 'true') 
-      && process.env.FORCE_REAL_CALLS !== 'true') {
-    try {
-      console.info('[AuthService] Using mock authentication for development/testing');
-      const mockToken = createMockToken(botId);
-      
-      // Cache the token
-      tokenCache.set(botId, {
-        token: mockToken,
-        expiry: Date.now() + MOCK_TOKEN_EXPIRY
-      });
-      
-      return createResponse(true, mockToken);
-    } catch (error) {
-      console.error('[AuthService] Error creating mock token:', error);
-      return createResponse(false, null, 'Mock authentication failed');
-    }
-  }
-
-  // Production mode - authenticate with the server
   try {
-    console.info(`[AuthService] Authenticating bot ${botId} with server at ${API_URL}`);
+    // Validate parameters
+    if (!botId) {
+      logger.warn('[AuthService] Missing botId in authenticateBot call');
+      return createResponse(false, null, 'Missing botId');
+    }
     
-    const response = await axios.post(`${API_URL}/api/bots/authenticate`, {
-      botId,
-      apiKey: effectiveApiKey
-    });
+    // Use provided API key or fallback to environment variable
+    const effectiveApiKey = apiKey || API_KEY;
     
-    if (response.data && response.data.success && response.data.token) {
-      const token = response.data.token;
-      const expiresIn = response.data.expiresIn || DEFAULT_TOKEN_EXPIRY;
-      
-      // Cache the token
-      tokenCache.set(botId, {
-        token,
-        expiry: Date.now() + expiresIn
-      });
-      
-      console.info(`[AuthService] Successfully authenticated bot ${botId}`);
-      return createResponse(true, token);
+    if (!effectiveApiKey) {
+      logger.warn('[AuthService] No API key available for authentication');
+      return createResponse(false, null, 'No API key available');
+    }
+    
+    // Authenticate with the main server
+    logger.info(`[AuthService] Authenticating bot ${botId} with server at ${API_URL}`);
+    logger.info(`[AuthService] Using API key: ${effectiveApiKey.substring(0, 3)}...${effectiveApiKey.substring(effectiveApiKey.length - 4)}`);
+    
+    const response = await axios.post(
+      `${API_URL}/api/bots/authenticate`,
+      { 
+        botId: botId,
+        apiKey: effectiveApiKey 
+      },
+      {
+        headers: {
+          'x-api-key': effectiveApiKey,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    // Check if the response is successful
+    if (response.data.success && response.data.token) {
+      logger.info(`[AuthService] Successfully authenticated bot ${botId}`);
+      return createResponse(true, response.data.token);
     } else {
-      const errorMsg = response.data?.message || 'Authentication failed';
-      console.error(`[AuthService] Server authentication failed: ${errorMsg}`);
+      const errorMsg = response.data.message || 'Unknown error';
+      logger.error(`[AuthService] Server authentication failed: ${errorMsg}`);
       return createResponse(false, null, errorMsg);
     }
   } catch (error) {
-    const errorMsg = error.response?.data?.message || error.message || 'Server authentication error';
-    console.error(`[AuthService] Error authenticating with server: ${errorMsg}`);
+    const errorMsg = error.message || 'Unknown error';
+    logger.error(`[AuthService] Error authenticating with server: ${errorMsg}`);
     
-    // Log detailed error information for debugging
     if (error.response) {
-      console.error(`[AuthService] Response status: ${error.response.status}`);
-      console.error(`[AuthService] Response data:`, error.response.data);
+      logger.error(`[AuthService] Response status: ${error.response.status}`);
+      logger.error(`[AuthService] Response data:`, error.response.data);
     }
     
     return createResponse(false, null, errorMsg);
@@ -235,16 +160,6 @@ async function getAuthToken(bot) {
     logger.error(`Error in getAuthToken for bot ${botId}: ${error?.message || 'Unknown error'}`);
   }
   
-  // Fall back to mock token in non-production
-  if (process.env.NODE_ENV !== 'production') {
-    logger.info(`Creating emergency mock token for bot ${botId}`);
-    const mockResult = createMockToken(botId);
-    if (mockResult.success) {
-      bot.authToken = mockResult.token;
-      return mockResult.token;
-    }
-  }
-  
   return null;
 }
 
@@ -289,6 +204,5 @@ module.exports = {
   authenticateBot,
   getAuthToken,
   clearAuthCache,
-  createAuthHeaders,
-  createMockToken // Expose for testing
+  createAuthHeaders
 }; 

@@ -4,7 +4,7 @@
  */
 
 // Valid bot types - must match templates available in the bot service
-exports.VALID_BOT_TYPES = ['news', 'weather'];
+exports.VALID_BOT_TYPES = ['news', 'weather', 'moderator'];
 
 // Valid bot statuses
 exports.VALID_BOT_STATUSES = ['active', 'inactive', 'suspended', 'pending'];
@@ -13,7 +13,8 @@ exports.VALID_BOT_STATUSES = ['active', 'inactive', 'suspended', 'pending'];
 exports.getBotTypesForUI = () => {
   return [
     { value: 'news', label: 'News Bot' },
-    { value: 'weather', label: 'Weather Bot' }
+    { value: 'weather', label: 'Weather Bot' },
+    { value: 'moderator', label: 'Moderator Bot' }
   ];
 };
 
@@ -29,6 +30,8 @@ exports.getDefaultCapabilitiesForType = (type) => {
       return ['messaging'];
     case 'weather':
       return ['messaging'];
+    case 'moderator':
+      return ['messaging', 'moderation', 'content-analysis'];
     default:
       return ['messaging'];
   }

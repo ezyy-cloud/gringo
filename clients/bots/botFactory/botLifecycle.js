@@ -7,6 +7,7 @@
  */
 
 const { getBotTemplate } = require('./templateManager');
+const { logger } = require('../utils');
 
 /**
  * Initialize a bot from bot data
@@ -27,7 +28,7 @@ async function initializeBot(activeBots, botTemplates, botData, helpers) {
       purpose: botData?.purpose,
       status: botData?.status
     };
-    console.log('BotFactory.initializeBot called with:', JSON.stringify(safeData));
+    logger.info('BotFactory.initializeBot called with:', JSON.stringify(safeData));
     
     // Validate bot data
     helpers.validateBotData(botData);
@@ -36,12 +37,12 @@ async function initializeBot(activeBots, botTemplates, botData, helpers) {
     const { _id = Date.now().toString(), type, username, config = {} } = botData;
     
     // Log available templates before trying to get the specific one
-    console.log(`Looking for template type: "${type}"`);
-    console.log('Available template types:', Array.from(botTemplates.keys()));
+    logger.info(`Looking for template type: "${type}"`);
+    logger.info('Available template types:', Array.from(botTemplates.keys()));
     
     // Get the bot template with validation
     const template = getBotTemplate(botTemplates, type, true);
-    console.log(`Template found for type "${type}":`, {
+    logger.info(`Template found for type "${type}":`, {
       name: template.name,
       description: template.description,
       hasInitialize: typeof template.initialize === 'function'
@@ -54,7 +55,7 @@ async function initializeBot(activeBots, botTemplates, botData, helpers) {
     }
     
     // Initialize the bot instance
-    console.log(`Initializing bot: ${username} (${_id})`);
+    logger.info(`Initializing bot: ${username} (${_id})`);
     let botInstance = template.initialize({
       ...botData,
       _id,
@@ -88,13 +89,13 @@ async function initializeBot(activeBots, botTemplates, botData, helpers) {
     
     // Connect to socket if bot is active
     if (botInstance.status === 'active' && typeof botInstance.connectToSocketServer === 'function') {
-      console.log(`Bot ${username} is active, attempting to connect to socket server...`);
+      logger.info(`Bot ${username} is active, attempting to connect to socket server...`);
       await helpers.connectBotToSocket(botInstance);
     }
     
     return botInstance;
   } catch (error) {
-    console.error('Error initializing bot:', error);
+    logger.error('Error initializing bot:', error);
     throw error;
   }
 }
@@ -107,23 +108,23 @@ async function initializeBot(activeBots, botTemplates, botData, helpers) {
  */
 async function initializeActiveBots(activeBots, botTemplates, helpers) {
   try {
-    console.log('Initializing active bots...');
+    logger.info('Initializing active bots...');
     
     // Log available templates
-    console.log('AVAILABLE BOT TEMPLATES:');
+    logger.info('AVAILABLE BOT TEMPLATES:');
     for (const [type, template] of botTemplates.entries()) {
-      console.log(`- ${type}: ${template.name || type}`);
+      logger.info(`- ${type}: ${template.name || type}`);
     }
     
     // Fetch active bots from server
     const bots = await helpers.fetchBotsFromServer();
-    console.log(`Retrieved ${bots.length} active bots from server`);
+    logger.info(`Retrieved ${bots.length} active bots from server`);
     
     // Log types of bots received
     const botTypes = bots.map(bot => bot.type || 'unknown');
     const uniqueTypes = [...new Set(botTypes)];
-    console.log('BOT TYPES FROM SERVER:', uniqueTypes);
-    console.log('TYPE DISTRIBUTION:', botTypes.reduce((acc, type) => {
+    logger.info('BOT TYPES FROM SERVER:', uniqueTypes);
+    logger.info('TYPE DISTRIBUTION:', botTypes.reduce((acc, type) => {
       acc[type] = (acc[type] || 0) + 1;
       return acc;
     }, {}));
@@ -132,24 +133,24 @@ async function initializeActiveBots(activeBots, botTemplates, helpers) {
       try {
         // Set default type if missing
         if (!bot.type) {
-          console.log(`Bot ${bot._id || bot.id} has no type field, defaulting to 'news'`);
+          logger.info(`Bot ${bot._id || bot.id} has no type field, defaulting to 'news'`);
           bot.type = 'news';
         }
         
         // Log if template exists for this bot's type
         const hasTemplate = botTemplates.has(bot.type);
-        console.log(`Bot ${bot.username} (${bot.type}): Template exists: ${hasTemplate}`);
+        logger.info(`Bot ${bot.username} (${bot.type}): Template exists: ${hasTemplate}`);
         
         await initializeBot(activeBots, botTemplates, bot, helpers);
-        console.log(`Successfully initialized bot: ${bot.username} (${bot.type})`);
+        logger.info(`Successfully initialized bot: ${bot.username} (${bot.type})`);
       } catch (botError) {
-        console.error(`Failed to initialize bot ${bot._id || bot.id}:`, botError);
+        logger.error(`Failed to initialize bot ${bot._id || bot.id}:`, botError);
       }
     }
     
-    console.log(`Initialized ${bots.length} active bots`);
+    logger.info(`Initialized ${bots.length} active bots`);
   } catch (error) {
-    console.error('Error initializing active bots:', error);
+    logger.error('Error initializing active bots:', error);
   }
 }
 
@@ -158,7 +159,7 @@ async function initializeActiveBots(activeBots, botTemplates, helpers) {
  * @param {Map} activeBots - Reference to the active bots collection
  */
 function shutdownAllBots(activeBots) {
-  console.log('Shutting down all bots...');
+  logger.info('Shutting down all bots...');
   
   // Get a reference to the bots outside the iterator to avoid 
   // issues with modifying the collection during iteration
@@ -170,7 +171,7 @@ function shutdownAllBots(activeBots) {
         bot.shutdown();
       }
     } catch (error) {
-      console.error(`Error shutting down bot "${bot.username}":`, error);
+      logger.error(`Error shutting down bot "${bot.username}":`, error);
     }
   }
 }
@@ -186,7 +187,7 @@ function shutdownBot(activeBots, botId) {
     const bot = activeBots.get(botId);
     
     if (!bot) {
-      console.warn(`Bot ${botId} not found`);
+      logger.warn(`Bot ${botId} not found`);
       return false;
     }
     
@@ -202,10 +203,10 @@ function shutdownBot(activeBots, botId) {
 
     // Remove the bot from active bots
     activeBots.delete(botId);
-    console.log(`Bot ${botId} shut down`);
+    logger.info(`Bot ${botId} shut down`);
     return true;
   } catch (error) {
-    console.error(`Error shutting down bot ${botId}:`, error);
+    logger.error(`Error shutting down bot ${botId}:`, error);
     return false;
   }
 }

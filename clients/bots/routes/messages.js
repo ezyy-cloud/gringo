@@ -6,6 +6,7 @@ const router = express.Router();
 const { validateApiKey } = require('../middleware');
 const config = require('../config');
 const axios = require('axios');
+const { logger } = require('../utils');
 
 module.exports = (botFactory) => {
   /**
@@ -52,7 +53,7 @@ module.exports = (botFactory) => {
         message: 'Message processed successfully'
       });
     } catch (error) {
-      console.error('Error processing message:', error);
+      logger.error('Error processing message:', error);
       return res.status(500).json({
         success: false,
         message: `Error processing message: ${error.message}`
@@ -101,7 +102,7 @@ module.exports = (botFactory) => {
         });
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      logger.error('Error sending message:', error);
       return res.status(500).json({
         success: false,
         message: `Error sending message: ${error.message}`

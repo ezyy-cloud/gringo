@@ -11,6 +11,7 @@
 
 const axios = require('axios');
 const { addSocketCapability } = require('../utils/socketUtil');
+const { logger } = require('../utils');
 
 // Configuration
 const MAIN_SERVER_URL = process.env.MAIN_SERVER_URL || 'http://localhost:3000';
@@ -49,7 +50,7 @@ function validateBotData(botData) {
  */
 async function retrieveBotApiKey(botId, username) {
   try {
-    console.log(`Getting API key for bot ${username} (${botId})`);
+    logger.info(`Getting API key for bot ${username} (${botId})`);
     const response = await axios.post(
       `${MAIN_SERVER_URL}/api/bots/service/get-api-key`,
       { botId },
@@ -61,14 +62,14 @@ async function retrieveBotApiKey(botId, username) {
     );
     
     if (response.data.success && response.data.apiKey) {
-      console.log(`Retrieved API key for bot ${username}`);
+      logger.info(`Retrieved API key for bot ${username}`);
       return response.data.apiKey;
     } else {
-      console.warn(`Could not retrieve API key for bot ${username}: ${response.data.message || 'Unknown error'}`);
+      logger.warn(`Could not retrieve API key for bot ${username}: ${response.data.message || 'Unknown error'}`);
       return null;
     }
   } catch (error) {
-    console.error(`Error retrieving API key for bot ${username}:`, error.message);
+    logger.error(`Error retrieving API key for bot ${username}:`, error.message);
     return null;
   }
 }
@@ -105,7 +106,7 @@ function enhanceBotInstance(botInstance, templateConfig, botConfig, status, apiK
       }
       
       // Log to console as well
-      console.log(`Bot ${botInstance.username}: ${message}`);
+      logger.info(`Bot ${botInstance.username}: ${message}`);
     };
   }
   
@@ -152,14 +153,14 @@ async function connectBotToSocket(botInstance) {
     }
     
     if (typeof botInstance.connectToSocketServer !== 'function') {
-      console.warn(`Bot ${botInstance.username} does not have connectToSocketServer method`);
+      logger.warn(`Bot ${botInstance.username} does not have connectToSocketServer method`);
       return false;
     }
     
     await botInstance.connectToSocketServer();
     return true;
   } catch (error) {
-    console.error(`Error connecting bot ${botInstance.username} to socket:`, error);
+    logger.error(`Error connecting bot ${botInstance.username} to socket:`, error);
     return false;
   }
 }
@@ -175,7 +176,7 @@ async function fetchBotsFromServer() {
   while (retryCount < maxRetries) {
     try {
       const url = `${MAIN_SERVER_URL}/api/bots/service/bots?limit=100`;
-      console.log(`Attempting to connect to: ${url}`);
+      logger.info(`Attempting to connect to: ${url}`);
       
       const response = await axios.get(url, {
         headers: {
@@ -184,8 +185,7 @@ async function fetchBotsFromServer() {
       });
       
       // Log the raw response data
-      console.log('================= BOT DATA FROM MAIN SERVER =================');
-      console.log('FULL RESPONSE:', JSON.stringify(response.data, null, 2));
+      logger.info('================= BOT DATA FROM MAIN SERVER =================');
       
       const botsData = response.data.data || [];
       
@@ -196,18 +196,17 @@ async function fetchBotsFromServer() {
       });
       
       // Log processed bot data
-      console.log('BOT COUNT:', botsData.length);
-      console.log('FIRST BOT (if available):', botsData.length > 0 ? JSON.stringify(botsData[0], null, 2) : 'No bots available');
-      console.log('BOT TYPES:', botsData.map(bot => bot.type).filter((v, i, a) => a.indexOf(v) === i));
-      console.log('=============================================================');
+      logger.info('BOT COUNT:', botsData.length);
+      logger.info('BOT TYPES:', botsData.map(bot => bot.type).filter((v, i, a) => a.indexOf(v) === i));
+      logger.info('=============================================================');
       
       return botsData;
     } catch (error) {
       retryCount++;
-      console.error(`Attempt ${retryCount}/${maxRetries} failed:`, error.message);
+      logger.error(`Attempt ${retryCount}/${maxRetries} failed:`, error.message);
       
       if (error.response && error.response.status === 401) {
-        console.error('Authentication failed. Check your BOT_API_KEY environment variable.');
+        logger.error('Authentication failed. Check your BOT_API_KEY environment variable.');
       }
       
       if (retryCount === maxRetries) {

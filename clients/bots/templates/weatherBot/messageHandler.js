@@ -12,7 +12,7 @@ const weatherService = require('./weatherService');
  * @returns {Object} - Processing result
  */
 async function processMessage(message, bot) {
-  logger.debug(`Weather bot received message from ${message.sender}`, message);
+  logger.debug(`Weather bot received message from ${message.sender}`);
   
   // Extract the message content
   const content = message.content || '';

@@ -3,12 +3,13 @@
  */
 const config = require('../config');
 const rateLimiter = require('./rateLimiter');
+const { logger } = require('../utils');
 
 /**
  * Error handling middleware
  */
 function errorHandler(err, req, res, next) {
-  console.error('Server error:', err);
+  logger.error('Server error:', err);
   
   // Send error response
   res.status(500).json({
@@ -88,7 +89,16 @@ function requestLogger(req, res, next) {
   // Log when the request completes
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+    const statusCode = res.statusCode;
+    
+    // Use different log levels based on status code
+    if (statusCode >= 500) {
+      logger.error(`${req.method} ${req.originalUrl} ${statusCode} - ${duration}ms`);
+    } else if (statusCode >= 400) {
+      logger.warn(`${req.method} ${req.originalUrl} ${statusCode} - ${duration}ms`);
+    } else {
+      logger.info(`${req.method} ${req.originalUrl} ${statusCode} - ${duration}ms`);
+    }
   });
   
   next();

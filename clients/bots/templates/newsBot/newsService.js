@@ -267,13 +267,14 @@ async function processNewsUpdate(bot) {
 }
 
 /**
- * Get news for a specific country
- * @param {string} countryCode - Two-letter country code
- * @param {Object} config - Bot configuration
+ * Get news for a specific country or multiple countries
+ * @param {string} countryCodes - Single country code or comma-separated list of country codes (max 5)
+ * @param {Object} config - Configuration options
  * @returns {Array} - Array of news items
  */
-async function getNewsForCountry(countryCode, config) {
-  const cacheKey = `${countryCode}_${config.language || 'en'}_${config.category || 'general'}`;
+async function getNewsForCountry(countryCodes, config) {
+  // Create a cache key based on all countries, language and category
+  const cacheKey = `${countryCodes}_${config.language || 'en'}_${config.category || 'general'}`;
   
   // Check if we've already hit rate limits today
   const today = new Date().toISOString().split('T')[0];
@@ -291,7 +292,7 @@ async function getNewsForCountry(countryCode, config) {
   const shouldUseCache = currentUsage > targetUsage + safetyBuffer;
   
   if (shouldUseCache && newsByCountryCache[cacheKey] && !isCountryCacheExpired(cacheKey)) {
-    logger.info(`Using cached news data for ${countryCode} (ahead of target usage)`);
+    logger.info(`Using cached news data for ${countryCodes} (ahead of target usage)`);
     return newsByCountryCache[cacheKey].items || [];
   }
   
@@ -300,11 +301,11 @@ async function getNewsForCountry(countryCode, config) {
     logger.warn(`Near daily limit (${currentUsage}/200). Using any available cached data.`);
     
     if (newsByCountryCache[cacheKey] && newsByCountryCache[cacheKey].items) {
-      logger.info(`Using cached news data for ${countryCode} to preserve remaining credits`);
+      logger.info(`Using cached news data for ${countryCodes} to preserve remaining credits`);
       return newsByCountryCache[cacheKey].items;
     }
     
-    logger.warn(`No cached data available for ${countryCode}. Skipping to preserve credits.`);
+    logger.warn(`No cached data available for ${countryCodes}. Skipping to preserve credits.`);
     return [];
   }
   
@@ -313,8 +314,8 @@ async function getNewsForCountry(countryCode, config) {
     // Required parameter
     apikey: process.env.NEWSDATA_API_KEY || config.newsApiKey || 'pub_73415c925b1126c7d5fe25c53b7a0e1bebad0',
     
-    // Geographic filtering
-    country: countryCode,
+    // Geographic filtering - now using multiple countries
+    country: countryCodes,
     
     // Content filtering
     language: config.language || 'en',
@@ -347,9 +348,11 @@ async function getNewsForCountry(countryCode, config) {
     
     logger.info(`API usage today: ${global[rateLimitKey]}/200 credits`);
     
+    
     // Check for successful response
-    if (!response.data) {
+    if (!response || !response.data) {
       logger.error('No data in API response');
+      logger.error(`Full response: ${apiUtils.safeStringify(response)}`);
       return [];
     }
     
@@ -368,10 +371,31 @@ async function getNewsForCountry(countryCode, config) {
       items: results
     };
     
-    logger.info(`Got ${results.length} news items for country ${countryCode}`);
+    logger.info(`Got ${results.length} news items for countries ${countryCodes}`);
     return results;
   } catch (error) {
-    logger.error(`Error fetching news for country ${countryCode}: ${JSON.stringify(error)}`);
+    // Create a detailed error object that can be properly stringified
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      code: error.code
+    };
+    
+    // Add response details if available
+    if (error.response) {
+      errorDetails.response = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      };
+    }
+    
+    // Log the detailed error
+    logger.error(`Error fetching news for countries ${countryCodes}: ${apiUtils.safeStringify(errorDetails)}`);
+    
+    // Log the raw error for additional context
+    logger.error('Raw error:', error);
     
     // If we get a rate limit error, track it
     if (error.response && error.response.status === 429) {
@@ -390,7 +414,7 @@ async function getNewsForCountry(countryCode, config) {
     
     // If we have cached data, use it as fallback after API error
     if (newsByCountryCache[cacheKey] && newsByCountryCache[cacheKey].items) {
-      logger.info(`Using cached news data for ${countryCode} after API error`);
+      logger.info(`Using cached news data for ${countryCodes} after API error`);
       return newsByCountryCache[cacheKey].items;
     }
     
@@ -511,16 +535,38 @@ async function searchNews(searchTerm, config) {
     
     return processedItems;
   } catch (error) {
-    logger.error(`Error searching news for term "${searchTerm}":`, error);
+    // Create a detailed error object that can be properly stringified
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      code: error.code
+    };
+    
+    // Add response details if available
+    if (error.response) {
+      errorDetails.response = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      };
+    }
+    
+    // Log the detailed error
+    logger.error(`Error searching news for term "${searchTerm}": ${apiUtils.safeStringify(errorDetails)}`);
+    
+    // Log the raw error for additional context
+    logger.error('Raw search error:', error);
+    
     return [];
   }
 }
 
 /**
- * Get news items from multiple countries
+ * Get news from multiple countries
  * 
- * @param {Object} config - Configuration parameters
- * @param {boolean} [isStartup=false] - Whether this is the initial startup fetch
+ * @param {Object} config - Bot configuration
+ * @param {boolean} isStartup - Whether this is the initial startup fetch
  * @returns {Array} - Array of news items
  */
 async function getNews(config, isStartup = false) {
@@ -539,93 +585,72 @@ async function getNews(config, isStartup = false) {
     const dayProgress = hoursElapsed / 24; // 0 to 1 representing progress through the day
     const targetUsage = Math.floor(200 * dayProgress);
     
-    // On startup, only process one country to avoid rate limits
-    let countriesToProcess = isStartup ? 1 : 1; // Default to 1 country
-    
-    if (!isStartup) {
-      if (currentUsage < targetUsage - 10) {
-        // We're behind schedule, process more countries
-        countriesToProcess = Math.min(3, Math.floor((targetUsage - currentUsage) / 3));
-        logger.info(`Behind target usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} countries`);
-      } else if (currentUsage > targetUsage + 10) {
-        // We're ahead of schedule, be more conservative
-        countriesToProcess = 1;
-        logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), processing only ${countriesToProcess} country`);
-      } else {
-        logger.info(`On target with usage (${currentUsage}/${targetUsage}), processing ${countriesToProcess} country`);
-      }
-    } else {
-      logger.info('Initial startup fetch - processing only one country');
-    }
-    
     // If we're near the daily limit, don't process any countries
     if (currentUsage >= 190) {
       logger.warn(`Near daily limit (${currentUsage}/200). Skipping news update.`);
       return [];
     }
     
-    // Get the next batch of countries using our country rotation utility
-    const countryString = countryUtils.getNextCountryBatch(countriesToProcess);
-    const countries = countryString.split(',');
+    // Always get 5 countries at once (maximum allowed by the API)
+    // This is more efficient as it uses only one API call instead of multiple
+    const countryString = countryUtils.getNextCountryBatch(5);
     
-    logger.info(`Using countries for this fetch: ${countryString} (${countries.length} countries)`);
+    logger.info(`Using countries for this fetch: ${countryString} (5 countries at once)`);
     logger.info(`Total countries in rotation: ${countryUtils.getTotalCountries()}`);
     
-    let allNewsItems = [];
-    
-    // Process countries sequentially to avoid rate limiting
-    for (const country of countries) {
-      try {
-        // Add a delay between requests to respect rate limits
-        if (countries.indexOf(country) > 0) {
-          const delaySeconds = 10;
-          logger.info(`Waiting ${delaySeconds} seconds before fetching news for next country...`);
-          await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
-        }
-        
-        // Prioritize breaking news
-        const countryItems = await getNewsForCountry(country.trim(), { 
-          ...config,
-          image: 1,
-          size: 3,
-          category: 'top' // Focus on top/breaking news
-        });
-        
-        if (Array.isArray(countryItems)) {
-          allNewsItems = allNewsItems.concat(countryItems);
-        }
-      } catch (error) {
-        logger.error(`Error fetching news for country ${country}, continuing with next country: ${error.message}`);
-        
-        // Add delay after an error
-        logger.info(`Adding delay after error before continuing...`);
-        await new Promise(resolve => setTimeout(resolve, 15000));
-      }
-    }
+    // Fetch news for all 5 countries in a single API call
+    const newsItems = await getNewsForCountry(countryString, { 
+      ...config,
+      image: 1,
+      size: config.size || 10, // Increase size to get more results since we're covering 5 countries
+      category: 'top' // Focus on top/breaking news
+    });
     
     // Remove duplicates (articles with the same title)
     const uniqueItems = [];
     const titleMap = new Map();
     
-    // Sort by newest first to prioritize breaking news
-    allNewsItems.sort((a, b) => {
-      const dateA = a.pubDate ? new Date(a.pubDate) : new Date(0);
-      const dateB = b.pubDate ? new Date(b.pubDate) : new Date(0);
-      return dateB - dateA; // Newest first
-    });
-    
-    // Filter for unique items
-    allNewsItems.forEach(item => {
-      if (!titleMap.has(item.title)) {
+    for (const item of newsItems) {
+      if (item.title && !titleMap.has(item.title)) {
         titleMap.set(item.title, true);
         uniqueItems.push(item);
       }
+    }
+    
+    logger.info(`Got ${uniqueItems.length} unique news items from ${countryString}`);
+    
+    // Sort by date (newest first)
+    uniqueItems.sort((a, b) => {
+      const dateA = a.pubDate ? new Date(a.pubDate) : new Date(0);
+      const dateB = b.pubDate ? new Date(b.pubDate) : new Date(0);
+      return dateB - dateA;
     });
     
-    logger.info(`Got ${uniqueItems.length} unique news items from ${countries.length} countries`);
     return uniqueItems;
   } catch (error) {
-    logger.error('Error getting news:', error);
+    // Create a detailed error object that can be properly stringified
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      code: error.code
+    };
+    
+    // Add response details if available
+    if (error.response) {
+      errorDetails.response = {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      };
+    }
+    
+    // Log the detailed error
+    logger.error(`Error in getNews: ${apiUtils.safeStringify(errorDetails)}`);
+    
+    // Log the raw error for additional context
+    logger.error('Raw getNews error:', error);
+    
     return [];
   }
 }
