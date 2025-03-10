@@ -11,7 +11,6 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const multer = require('multer');
 const { cloudinary } = require('./utils/cloudinaryConfig');
 const streamifier = require('streamifier');
-const logger = require('./utils/logger');
 
 // Import models
 const User = require('./models/User');
@@ -80,20 +79,20 @@ const redisClientForSocketIO = createClient({
   try {
     await redisClient.connect();
     await redisClientForSocketIO.connect();
-    logger.info('Redis clients connected');
+    console.log('Redis clients connected');
     
     // Set up error handling
     redisClient.on('error', (err) => {
-      logger.error('Redis error:', err);
+      console.error('Redis error:', err);
     });
     
     redisClientForSocketIO.on('error', (err) => {
-      logger.error('Redis Socket.IO adapter error:', err);
+      console.error('Redis Socket.IO adapter error:', err);
     });
   } catch (error) {
-    logger.error('Redis connection error:', error);
+    console.error('Redis connection error:', error);
     // Continue without Redis if it's not available
-    logger.info('Continuing without Redis caching and Socket.IO scaling');
+    console.log('Continuing without Redis caching and Socket.IO scaling');
   }
 })();
 
@@ -151,22 +150,18 @@ mongoose.connect(process.env.MONGODB_URI, {
   socketTimeoutMS: 45000,
   serverSelectionTimeoutMS: 5000
 })
-  .then(() => {
-    logger.info('MongoDB Connected');
-  })
-  .catch(err => {
-    logger.error('MongoDB Connection Error:', err);
-  });
+  .then(() => console.log('MongoDB Connected'))
+  .catch(err => console.error('MongoDB Connection Error:', err));
 
 // Set up connection monitoring
 const db = mongoose.connection;
 
 db.on('error', (err) => {
-  logger.error('MongoDB connection error:', err);
+  console.error('MongoDB connection error:', err);
 });
 
 db.on('disconnected', () => {
-  logger.warn('MongoDB disconnected. Attempting to reconnect...');
+  console.warn('MongoDB disconnected. Attempting to reconnect...');
 });
 
 // Apply rate limiting to all API routes
@@ -179,7 +174,7 @@ app.use('/api/', (req, res, next) => {
   
   // Skip rate limiting for bot microservice endpoints
   if (req.path === '/bots/active' || req.path === '/bots/debug-api-key') {
-    logger.info('Skipping rate limiting for bot microservice endpoint:', req.path);
+    console.log('Skipping rate limiting for bot microservice endpoint:', req.path);
     return next();
   }
   
@@ -187,7 +182,7 @@ app.use('/api/', (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   const expectedBotApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
   if (apiKey && apiKey === expectedBotApiKey) {
-    logger.info('Skipping rate limiting for bot client with valid API key');
+    console.log('Skipping rate limiting for bot client with valid API key');
     return next();
   }
   
@@ -205,7 +200,7 @@ app.use('/api/auth/', (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   const expectedBotApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
   if (apiKey && apiKey === expectedBotApiKey) {
-    logger.info('Skipping auth rate limiting for bot client with valid API key');
+    console.log('Skipping auth rate limiting for bot client with valid API key');
     return next();
   }
   
@@ -243,10 +238,10 @@ const io = socketIo(server, {
       const subClient = redisClientForSocketIO;
       
       io.adapter(createAdapter(pubClient, subClient));
-      logger.info('Socket.IO Redis adapter configured for horizontal scaling');
+      console.log('Socket.IO Redis adapter configured for horizontal scaling');
     } catch (error) {
-      logger.error('Error setting up Socket.IO Redis adapter:', error);
-      logger.info('Socket.IO will operate without Redis adapter (no horizontal scaling)');
+      console.error('Error setting up Socket.IO Redis adapter:', error);
+      console.log('Socket.IO will operate without Redis adapter (no horizontal scaling)');
     }
   }
 })();
@@ -256,54 +251,12 @@ const socketMiddleware = createSocketMiddleware(io);
 
 // Set up Socket.IO connection handling
 io.on('connection', (socket) => {
-  logger.info('New socket connection:', socket.id);
+  console.log('New socket connection:', socket.id);
   
   // Handle authentication
   socket.on('authenticate', async (data) => {
     try {
-      const { token, username, userId, botId, apiKey } = data;
-      
-      // For bot API key authentication
-      if (botId && apiKey) {
-        try {
-          // Log bot authentication attempt, but mask most of the API key for security
-          const maskedApiKey = apiKey ? '****' + apiKey.slice(-4) : 'undefined';
-          const sanitizedPayload = { botId, apiKey: maskedApiKey };
-          logger.info(`[SERVER] Bot authentication attempt with payload: ${JSON.stringify(sanitizedPayload)}`);
-          
-          // Verify the bot's identity
-          const bot = await Bot.findById(botId);
-          if (!bot || !bot.apiKey || bot.apiKey !== apiKey) {
-            logger.error(`[SERVER] Bot authentication failed: Invalid credentials for bot ${botId}`);
-            socket.emit('authenticated', { success: false, error: 'Invalid bot credentials' });
-            return;
-          }
-          
-          // Store bot's data in the socket
-          socket.username = bot.username;
-          socket.userId = bot._id;
-          socket.isBot = true;
-          
-          logger.info(`[SERVER] Bot authentication successful for bot ${botId}`);
-          
-          // Join bot-specific room
-          socket.join(`user:${bot._id}`);
-          logger.info(`Socket ${socket.id} joined room for user:${bot._id}`);
-          
-          socket.emit('authenticated', {
-            success: true,
-            username: bot.username,
-            userId: bot._id,
-            isBot: true
-          });
-          
-          return;
-        } catch (error) {
-          logger.error(`[SERVER] Bot authentication failed: ${error.message}`);
-          socket.emit('authenticated', { success: false, error: 'Bot authentication failed' });
-          return;
-        }
-      }
+      const { token, username, userId } = data;
       
       // Validate the token
       let isValidToken = false;
@@ -327,10 +280,10 @@ io.on('connection', (socket) => {
             socket.userId = decoded.id;
             socket.isBot = isBot;
             
-            logger.info(`Socket ${socket.id} authenticated as ${isBot ? 'bot' : 'user'} ${socket.username}`);
+            console.log(`Socket ${socket.id} authenticated as ${isBot ? 'bot' : 'user'} ${socket.username}`);
           }
         } catch (tokenError) {
-          logger.error('Token validation error:', tokenError.message);
+          console.error('Token validation error:', tokenError.message);
           isValidToken = false;
         }
       }
@@ -341,7 +294,7 @@ io.on('connection', (socket) => {
         socket.username = username;
         socket.userId = userId;
         isValidToken = true;
-        logger.info(`Socket ${socket.id} authenticated in dev mode as ${username}`);
+        console.log(`Socket ${socket.id} authenticated in dev mode as ${username}`);
       }
       
       // If authentication failed, reject the connection
@@ -356,7 +309,7 @@ io.on('connection', (socket) => {
       // Join a user-specific room for targeted messages
       if (socket.userId) {
         socket.join(`user:${socket.userId}`);
-        logger.info(`Socket ${socket.id} joined room for user:${socket.userId}`);
+        console.log(`Socket ${socket.id} joined room for user:${socket.userId}`);
       }
       
       // Update user's online status - skip for bots if configured
@@ -376,7 +329,7 @@ io.on('connection', (socket) => {
             isBot
           });
         } catch (error) {
-          logger.error('Error updating user/bot online status:', error);
+          console.error('Error updating user/bot online status:', error);
         }
       }
       
@@ -387,7 +340,7 @@ io.on('connection', (socket) => {
         isBot
       });
     } catch (error) {
-      logger.error('Authentication error:', error);
+      console.error('Authentication error:', error);
       socket.emit('authenticated', { success: false, error: 'Authentication failed' });
     }
   });
@@ -399,7 +352,7 @@ io.on('connection', (socket) => {
       
       // Use socket's username if set during authentication, or fall back to data
       const senderUsername = socket.username || username || 'Anonymous';
-      logger.info('Message received:', message, 'from', senderUsername);
+      console.log('Message received:', message, 'from', senderUsername);
       
       // Create a unique ID for this message
       let messageId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -462,7 +415,7 @@ io.on('connection', (socket) => {
             }
           }
         } catch (error) {
-          logger.error('Error saving message to database:', error);
+          console.error('Error saving message to database:', error);
         }
       }
       
@@ -476,7 +429,7 @@ io.on('connection', (socket) => {
         timestamp: new Date()
       });
     } catch (error) {
-      logger.error('Error handling message:', error);
+      console.error('Error handling message:', error);
       socket.emit('error', { message: 'Error processing your message' });
     }
   });
@@ -491,7 +444,7 @@ io.on('connection', (socket) => {
       const senderUsername = socket.username || data.username || data.sender || 'Anonymous';
       const location = data.location || null;
       
-      logger.info('SendMessage received:', message, 'from', senderUsername);
+      console.log('SendMessage received:', message, 'from', senderUsername);
       
       // Create a unique ID for this message (use provided ID or create new one)
       let messageId = data.messageId || (Date.now().toString(36) + Math.random().toString(36).substring(2));
@@ -554,7 +507,7 @@ io.on('connection', (socket) => {
             }
           }
         } catch (error) {
-          logger.error('Error saving message to database:', error);
+          console.error('Error saving message to database:', error);
         }
       }
       
@@ -568,7 +521,7 @@ io.on('connection', (socket) => {
         timestamp: new Date()
       });
     } catch (error) {
-      logger.error('Error handling sendMessage:', error);
+      console.error('Error handling sendMessage:', error);
       socket.emit('error', { message: 'Error processing your message' });
     }
   });
@@ -584,7 +537,7 @@ io.on('connection', (socket) => {
   
   // Handle user going offline
   socket.on('disconnect', async () => {
-    logger.info('Socket disconnected:', socket.id);
+    console.log('Socket disconnected:', socket.id);
     
     // Update user's online status if we have a username
     if (socket.username) {
@@ -608,7 +561,7 @@ io.on('connection', (socket) => {
           socket.broadcast.emit('userOffline', { username: socket.username });
         }
       } catch (error) {
-        logger.error('Error updating user offline status:', error);
+        console.error('Error updating user offline status:', error);
       }
     }
   });
@@ -620,10 +573,10 @@ app.get('/debug-api-key', (req, res) => {
   const apiKey = req.headers['x-api-key'];
   const expectedApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
   
-  logger.info('DEBUG API KEY CHECK:');
-  logger.info(`- Received API Key: ${apiKey}`);
-  logger.info(`- Expected API Key: ${expectedApiKey}`);
-  logger.info(`- Headers: ${JSON.stringify(req.headers)}`);
+  console.log('DEBUG API KEY CHECK:');
+  console.log(`- Received API Key: ${apiKey}`);
+  console.log(`- Expected API Key: ${expectedApiKey}`);
+  console.log(`- Headers: ${JSON.stringify(req.headers)}`);
   
   res.status(200).json({
     success: true,
@@ -637,7 +590,7 @@ app.get('/debug-api-key', (req, res) => {
 // Direct route for active bots (no authentication)
 app.get('/api/bots-direct/active', async (req, res) => {
   try {
-    logger.info('Direct active bots endpoint called');
+    console.log('Direct active bots endpoint called');
     
     // Find all active bots
     const bots = await Bot.find({ 
@@ -663,7 +616,7 @@ app.get('/api/bots-direct/active', async (req, res) => {
         
         // Update the object for the response
         bot.type = defaultType;
-        logger.info(`Added default type '${defaultType}' to bot ${bot.username}`);
+        console.log(`Added default type '${defaultType}' to bot ${bot.username}`);
       }
     }
     
@@ -672,7 +625,7 @@ app.get('/api/bots-direct/active', async (req, res) => {
       bots: bots
     });
   } catch (error) {
-    logger.error('Error getting active bots:', error);
+    console.error('Error getting active bots:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get active bots'
@@ -692,7 +645,7 @@ app.post('/api/admin/migrate/add-bot-type', adminProtect, async (req, res) => {
       result
     });
   } catch (error) {
-    logger.error('Migration error:', error);
+    console.error('Migration error:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to run migration'
@@ -714,254 +667,7 @@ app.use('/api/messages', messageRoutes);
 
 // Add special Socket.IO dependent routes
 app.post('/api/messages', messageHandlers.createMessage);
-app.post('/api/messages/with-image', protect, upload.single('image'), async (req, res) => {
-  try {
-    // Extract parameters from the request
-    const { text, content, location } = req.body;
-    const file = req.file;
-    
-    // Debug authentication information
-    logger.info(`Authentication debug: ${JSON.stringify({
-      hasUser: !!req.user,
-      userInfo: req.user ? {
-        id: req.user._id ? req.user._id.toString() : 'missing',
-        username: req.user.username || 'missing',
-        hasAuth: !!req.auth
-      } : 'missing'
-    })}`);
-    
-    // Ensure text is not undefined (set default empty string if needed)
-    const messageText = text || content || '';
-    
-    // Get user data with multiple fallbacks
-    let userId, username;
-    
-    // Case 1: We have a fully populated user object with ID
-    if (req.user && req.user._id) {
-      userId = req.user._id;
-      username = req.user.username;
-      logger.info(`Using authenticated user with ID: ${username} (${userId})`);
-    } 
-    // Case 2: We have a user object with username but no ID (look it up)
-    else if (req.user && req.user.username) {
-      username = req.user.username;
-      logger.info(`Looking up user ID for username: ${username}`);
-      
-      try {
-        // Look up the user by username
-        const user = await User.findOne({ username });
-        if (user && user._id) {
-          userId = user._id;
-          logger.info(`Found user ID: ${userId} for username: ${username}`);
-        } else {
-          logger.error(`Could not find user with username: ${username}`);
-          return res.status(404).json({
-            success: false,
-            error: 'User not found'
-          });
-        }
-      } catch (lookupError) {
-        logger.error(`Error looking up user: ${lookupError.message}`);
-        return res.status(500).json({
-          success: false,
-          error: 'Error looking up user'
-        });
-      }
-    }
-    // Case 3: Alternative auth property
-    else if (req.auth) {
-      userId = req.auth.id;
-      username = req.auth.username;
-      logger.info(`Using auth token user: ${username} (${userId})`);
-    } 
-    // Case 4: Data in request body (development only)
-    else if (process.env.NODE_ENV === 'development' && req.body.userId && req.body.username) {
-      userId = req.body.userId;
-      username = req.body.username;
-      logger.info(`Using body-provided user: ${username} (${userId})`);
-    } 
-    // No valid user information
-    else {
-      logger.error('No user information available for image upload');
-      return res.status(401).json({
-        success: false,
-        error: 'User authentication required'
-      });
-    }
-    
-    // Parse location data if provided
-    let parsedLocation = null;
-    if (location) {
-      try {
-        parsedLocation = JSON.parse(location);
-        logger.info(`Parsed location from string: ${JSON.stringify(parsedLocation)}`);
-      } catch (err) {
-        logger.error(`Error parsing location: ${err.message}`);
-        // Continue without location data
-      }
-    }
-    
-    if (file) {
-      logger.info(`Image upload received with location data: ${JSON.stringify({
-        rawLocation: location,
-        parsedLocation,
-        hasCoordinates: parsedLocation && parsedLocation.latitude ? 'YES' : 'NO',
-        fuzzyLocation: parsedLocation && parsedLocation.fuzzyLocation ? 'YES' : 'NO'
-      })}`);
-      
-      logger.info(`Image upload details: ${JSON.stringify({
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        size: file.size,
-        bufferLength: file.buffer.length,
-        bufferStart: file.buffer.toString('hex').substring(0, 50) + '...'
-      })}`);
-      
-      logger.info(`Image upload received: ${file.originalname} from socket ID: ${req.body.socketId || 'unknown'} User: ${username}`);
-      
-      // Upload to Cloudinary with retry logic
-      let cloudinaryResult = null;
-      const maxRetries = 3;
-      let attempt = 1;
-      
-      while (attempt <= maxRetries && !cloudinaryResult) {
-        try {
-          logger.info(`Attempting Cloudinary upload (attempt ${attempt}/${maxRetries})`);
-          
-          // Create a stream from the buffer
-          const stream = streamifier.createReadStream(file.buffer);
-          
-          // Upload the image to Cloudinary
-          cloudinaryResult = await new Promise((resolve, reject) => {
-            const uploadStream = cloudinary.uploader.upload_stream(
-              {
-                folder: 'messages',
-                resource_type: 'auto',
-              },
-              (error, result) => {
-                if (error) return reject(error);
-                resolve(result);
-              }
-            );
-            stream.pipe(uploadStream);
-          });
-          
-        } catch (err) {
-          logger.error(`Cloudinary upload error (attempt ${attempt}/${maxRetries}): ${err.message}`);
-          attempt++;
-          
-          // Wait before retrying
-          if (attempt <= maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-          }
-        }
-      }
-      
-      if (!cloudinaryResult) {
-        logger.error('Failed to upload image after multiple attempts');
-        return res.status(500).json({ 
-          success: false, 
-          error: 'Failed to upload image after multiple attempts' 
-        });
-      }
-      
-      // Prepare message data for database - ensure required fields
-      const messageData = {
-        text: messageText || 'Image message', // Use the text or provide a default for image-only messages
-        content: messageText || 'Image message', // Also set content field for compatibility
-        userId: userId, // Use the userId we determined above
-        senderUsername: username,
-        messageId: Date.now().toString(36) + Math.random().toString(36).substring(2),
-        imageUrl: cloudinaryResult.secure_url,
-        timestamp: new Date()
-      };
-      
-      // Add location data if available
-      if (parsedLocation) {
-        logger.info(`About to save message with location data: ${JSON.stringify({
-          hasLocation: 'YES',
-          hasCoordinates: parsedLocation.latitude ? 'YES' : 'NO',
-          locationData: parsedLocation
-        })}`);
-        
-        messageData.location = parsedLocation;
-        logger.info(`Saving message to database with location data: ${JSON.stringify(parsedLocation)}`);
-      }
-      
-      // Log the message data before saving to help debug validation issues
-      logger.info(`Attempting to save message with data: ${JSON.stringify({
-        hasText: !!messageData.text,
-        textLength: messageData.text.length,
-        hasUserId: !!messageData.userId,
-        userId: messageData.userId.toString ? messageData.userId.toString() : messageData.userId,
-        senderUsername: messageData.senderUsername
-      })}`);
-      
-      // Save message to database
-      const message = new Message(messageData);
-      
-      try {
-        const savedMessage = await message.save();
-        
-        if (savedMessage && savedMessage.location) {
-          logger.info(`Location data saved for message: (${savedMessage.location.latitude}, ${savedMessage.location.longitude})`);
-        }
-        
-        logger.info(`Message saved to database: ${savedMessage._id}${savedMessage.location ? `, Location: ${JSON.stringify(savedMessage.location)}` : ''}`);
-        
-        // Prepare response message object
-        const messageObj = {
-          id: savedMessage._id,
-          text: savedMessage.text,
-          sender: username,
-          imageUrl: cloudinaryResult.secure_url,
-          createdAt: savedMessage.timestamp,
-          location: savedMessage.location
-        };
-        
-        // Broadcast message to all connected clients
-        if (savedMessage.location) {
-          logger.info(`Broadcasting message with location: (${savedMessage.location.latitude}, ${savedMessage.location.longitude})`);
-        }
-        
-        io.emit('message', messageObj);
-        logger.info(`API Message sent to all other clients by manual filtering with ID: ${savedMessage.messageId}`);
-        
-        // Return success response
-        return res.status(201).json({ 
-          success: true, 
-          message: savedMessage 
-        });
-      } catch (dbError) {
-        logger.error(`Database error saving message: ${dbError.message}`);
-        // If validation error, provide more details
-        if (dbError.name === 'ValidationError') {
-          logger.error(`Validation errors: ${JSON.stringify(dbError.errors)}`);
-        }
-        return res.status(500).json({ 
-          success: false, 
-          error: `Database error: ${dbError.message}` 
-        });
-      }
-      
-    } else {
-      logger.error('No image file found in request');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No image file provided' 
-      });
-    }
-  } catch (error) {
-    logger.error(`Error in image upload: ${error.message}`);
-    if (error.stack) {
-      logger.error(`Error stack: ${error.stack}`);
-    }
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
+app.post('/api/messages/with-image', protect, upload.single('image'), messageHandlers.createMessageWithImage);
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -983,5 +689,5 @@ app.get('/api/health', (req, res) => {
 // Start the server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 }); 
