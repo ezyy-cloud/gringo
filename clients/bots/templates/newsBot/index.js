@@ -64,6 +64,7 @@ const countryUtils = require('./countryUtils');
 let currentBackoff = 0;
 const baseBackoff = 5000; // 5 seconds base backoff
 const maxBackoff = 30 * 60 * 1000; // 30 minutes maximum backoff
+const POST_INTERVAL = 1000 * 60 * 10; // 10 minutes in milliseconds
 
 // Function to calculate exponential backoff with jitter
 function calculateBackoff(attempt = 1) {
