@@ -4,6 +4,7 @@ const botController = require('../controllers/botController');
 const { adminProtect } = require('../middleware/adminMiddleware');
 const { botProtect, botRateLimiter, verifyWebhookSignature, botServiceProtect } = require('../middleware/botMiddleware');
 const Bot = require('../models/Bot');
+const mongoose = require('mongoose');
 
 // Admin bot management routes (protected)
 router.post('/register', adminProtect, botController.registerBot);
@@ -23,6 +24,65 @@ router.get('/service/bots', botServiceProtect, botController.getAllBots);
 router.get('/service/bots/:id', botServiceProtect, botController.getBotById);
 router.put('/service/bots/:id', botServiceProtect, botController.updateBot);
 router.delete('/service/bots/:id', botServiceProtect, botController.deleteBot);
+
+// Enhanced bot details endpoint with better error handling
+router.get('/service/bots/:id/details', botServiceProtect, async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[SERVER] Fetching detailed bot info for ID: ${id}`);
+    
+    // Validate ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log(`[SERVER] Invalid bot ID format: ${id}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid bot ID format'
+      });
+    }
+    
+    // Find the bot with all fields
+    const bot = await Bot.findById(id);
+    
+    // Log the attempt result
+    if (!bot) {
+      console.log(`[SERVER] Bot not found with ID: ${id}`);
+      return res.status(404).json({
+        success: false,
+        error: 'Bot not found'
+      });
+    }
+    
+    console.log(`[SERVER] Successfully found bot: ${bot.username} (${bot._id})`);
+    
+    // Return the bot data (excluding sensitive fields)
+    res.status(200).json({
+      success: true,
+      bot: {
+        _id: bot._id,
+        username: bot.username,
+        email: bot.email,
+        type: bot.type || 'unknown',
+        purpose: bot.purpose,
+        capabilities: bot.capabilities,
+        status: bot.status,
+        creator: bot.creator,
+        webhookUrl: bot.webhookUrl,
+        rateLimits: bot.rateLimits,
+        lastActive: bot.lastActive,
+        createdAt: bot.createdAt,
+        updatedAt: bot.updatedAt,
+        config: bot.config || {}
+      }
+    });
+  } catch (error) {
+    console.error(`[SERVER] Error fetching bot details: ${error.message}`, error);
+    res.status(500).json({
+      success: false,
+      error: 'Error fetching bot details',
+      message: error.message
+    });
+  }
+});
 
 // Direct service endpoint to update bot type
 router.put('/service/set-type/:id', botServiceProtect, async (req, res) => {
@@ -146,10 +206,11 @@ router.post('/:id/start', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(`[SERVER] Error starting bot ${req.params.id}:`, error);
-    return res.status(500).json({
+    console.error(`[SERVER] Error starting bot: ${error.message}`, error);
+    res.status(500).json({
       success: false,
-      error: 'Failed to start bot'
+      error: 'Failed to start bot',
+      message: error.message
     });
   }
 });
@@ -184,10 +245,11 @@ router.post('/:id/stop', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(`[SERVER] Error stopping bot ${req.params.id}:`, error);
-    return res.status(500).json({
+    console.error(`[SERVER] Error stopping bot: ${error.message}`, error);
+    res.status(500).json({
       success: false,
-      error: 'Failed to stop bot'
+      error: 'Failed to stop bot',
+      message: error.message
     });
   }
 });
@@ -208,9 +270,8 @@ router.post('/:id/restart', async (req, res) => {
       });
     }
     
-    // Update the bot status (restart = ensure status is active)
-    bot.status = 'active';
-    bot.lastActive = new Date(); // Update last active timestamp
+    // Update the bot status to inactive
+    bot.status = 'inactive';
     await bot.save();
     
     // Return success response
@@ -219,35 +280,17 @@ router.post('/:id/restart', async (req, res) => {
       message: 'Bot restarted successfully',
       data: {
         id: bot._id,
-        status: 'running'
+        status: 'stopped'
       }
     });
   } catch (error) {
-    console.error(`[SERVER] Error restarting bot ${req.params.id}:`, error);
-    return res.status(500).json({
+    console.error(`[SERVER] Error restarting bot: ${error.message}`, error);
+    res.status(500).json({
       success: false,
-      error: 'Failed to restart bot'
+      error: 'Failed to restart bot',
+      message: error.message
     });
   }
 });
 
-// Debug endpoint for API key verification
-router.get('/debug-api-key', (req, res) => {
-  const apiKey = req.headers['x-api-key'];
-  const expectedApiKey = process.env.BOT_API_KEY || 'dev-bot-api-key';
-  
-  console.log('DEBUG API KEY CHECK:');
-  console.log(`- Received API Key: ${apiKey}`);
-  console.log(`- Expected API Key: ${expectedApiKey}`);
-  console.log(`- Headers: ${JSON.stringify(req.headers)}`);
-  
-  res.status(200).json({
-    success: true,
-    message: 'API key check logged to console',
-    match: apiKey === expectedApiKey,
-    received: apiKey ? 'API key provided' : 'No API key',
-    expected: expectedApiKey ? 'API key configured' : 'No API key configured'
-  });
-});
-
-module.exports = router; 
+module.exports = router;

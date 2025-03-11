@@ -599,23 +599,29 @@ module.exports = (botFactory) => {
       
       // Try to activate the bot
       try {
-        // Call main API to get bot details first
+        // Call main API to get bot details
         const apiKey = process.env.BOT_API_KEY || config.BOT_API_KEY || 'dev-bot-api-key';
         const apiUrl = process.env.API_URL || config.API_URL || 'http://localhost:3000/api';
         
+        // Use the new enhanced endpoint for better error handling
         logger.info(`Fetching bot ${botId} details from ${apiUrl}`);
-        const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}`, {
+        const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}/details`, {
           headers: {
             'x-api-key': apiKey
-          }
+          },
+          timeout: 10000 // Add a timeout to prevent hanging requests
         });
         
         if (!response.data || !response.data.success) {
           throw new Error('Failed to get bot details from main API');
         }
         
-        const botDetails = response.data.data || response.data.bot;
-        logger.info(`Got bot details:`, botDetails);
+        // Update to use the new response structure
+        const botDetails = response.data.bot;
+        logger.info(`Got bot details for ${botDetails.username} (${botDetails._id})`, {
+          type: botDetails.type,
+          status: botDetails.status
+        });
         
         // Start the bot with the factory
         bot = await botFactory.startBot(botDetails.type || 'news', botDetails);
@@ -723,19 +729,25 @@ module.exports = (botFactory) => {
         const apiKey = process.env.BOT_API_KEY || config.BOT_API_KEY || 'dev-bot-api-key';
         const apiUrl = process.env.API_URL || config.API_URL || 'http://localhost:3000/api';
         
+        // Use the new enhanced endpoint for better error handling
         logger.info(`Fetching bot ${botId} details from ${apiUrl}`);
-        const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}`, {
+        const response = await axios.get(`${apiUrl}/bots/service/bots/${botId}/details`, {
           headers: {
             'x-api-key': apiKey
-          }
+          },
+          timeout: 10000 // Add a timeout to prevent hanging requests
         });
         
         if (!response.data || !response.data.success) {
           throw new Error('Failed to get bot details from main API');
         }
         
-        const botDetails = response.data.data || response.data.bot;
-        logger.info(`Got bot details:`, botDetails);
+        // Update to use the new response structure
+        const botDetails = response.data.bot;
+        logger.info(`Got bot details for ${botDetails.username} (${botDetails._id})`, {
+          type: botDetails.type,
+          status: botDetails.status
+        });
         
         // Start the bot with the factory
         bot = await botFactory.startBot(botDetails.type || 'news', botDetails);
