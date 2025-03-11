@@ -66,6 +66,9 @@ const baseBackoff = 5000; // 5 seconds base backoff
 const maxBackoff = 30 * 60 * 1000; // 30 minutes maximum backoff
 const POST_INTERVAL = 1000 * 60 * 10; // 10 minutes in milliseconds
 
+// Force reset backoff on startup to ensure smooth operation
+currentBackoff = 0;
+
 // Function to calculate exponential backoff with jitter
 function calculateBackoff(attempt = 1) {
   // Exponential backoff: base * 2^attempt
@@ -468,75 +471,99 @@ module.exports = {
         scheduleNextRun();
       }, 2 * 60 * 1000); // Wait 2 minutes before starting regular schedule
 
+      // Schedule the next run regardless of success/failure
       const scheduleNextRun = () => {
-        // Get current usage and target
-        const today = new Date().toISOString().split('T')[0];
-        const rateLimitKey = `rateLimit_${today}`;
-        const currentUsage = global[rateLimitKey] || 0;
-        const targetUsage = getDailyUsageTarget();
-        
-        // Adjust interval based on usage vs target
-        let nextInterval = baseIntervalMs;
-        
-        if (currentUsage > targetUsage + 5) {
-          // We're ahead of schedule, slow down
-          const slowdownFactor = 1 + ((currentUsage - targetUsage) / 20);
-          nextInterval = baseIntervalMs * slowdownFactor;
-          logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), slowing down by factor of ${slowdownFactor.toFixed(2)}`);
-        } else if (currentUsage < targetUsage - 5 && currentUsage < 180) {
-          // We're behind schedule, speed up (but don't exceed 90% of daily limit)
-          const speedupFactor = Math.max(0.5, 1 - ((targetUsage - currentUsage) / 40));
-          nextInterval = baseIntervalMs * speedupFactor;
-          logger.info(`Behind target usage (${currentUsage}/${targetUsage}), speeding up by factor of ${speedupFactor.toFixed(2)}`);
-        }
-        
-        // Ensure minimum interval of 3 minutes to avoid overwhelming the API
-        nextInterval = Math.max(nextInterval, 3 * 60 * 1000);
-        
-        // Ensure we don't exceed daily limit
-        if (currentUsage >= 195) {
-          // Near daily limit, wait until tomorrow
-          const now = new Date();
-          const tomorrow = new Date(now);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          tomorrow.setHours(0, 5, 0, 0); // 12:05 AM tomorrow
+        try {
+          // Get current usage and target
+          const today = new Date().toISOString().split('T')[0];
+          const rateLimitKey = `rateLimit_${today}`;
+          const currentUsage = global[rateLimitKey] || 0;
+          const targetUsage = getDailyUsageTarget();
           
-          nextInterval = tomorrow.getTime() - now.getTime();
-          logger.warn(`Daily limit nearly reached (${currentUsage}/200). Waiting until tomorrow.`);
-        }
-        
-        logger.info(`Scheduling next news update in ${(nextInterval/60000).toFixed(1)} minutes`);
-        
-        // Schedule the next run
-        bot.newsUpdateTimeoutId = setTimeout(async () => {
-          try {
-            // Check if we've hit rate limits today
-            const today = new Date().toISOString().split('T')[0];
-            const rateLimitKey = `rateLimit_${today}`;
-            const currentUsage = global[rateLimitKey] || 0;
-            
-            if (currentUsage >= 195) {
-              logger.warn(`Daily limit reached (${currentUsage}/200). Skipping news update.`);
-            } else {
-              logger.info(`Running scheduled news update for ${bot.username}`);
-              const result = await bot.processNewsUpdate();
-              
-              // Log the result
-              if (!result.success) {
-                logger.error(`News update failed: ${result.error || 'Unknown error'}`);
-              } else if (result.rateLimited) {
-                logger.warn(`News update encountered rate limiting`);
-              } else {
-                logger.info(`News update completed successfully`);
-              }
-            }
-          } catch (error) {
-            logger.error(`Error during scheduled news update: ${error.message}`);
-          } finally {
-            // Schedule the next run regardless of success/failure
-            scheduleNextRun();
+          // Reset backoff if it's been more than 15 minutes since the last run
+          // This prevents the bot from getting stuck in a high backoff state
+          if (global.lastRunTime && (Date.now() - global.lastRunTime > 15 * 60 * 1000)) {
+            logger.warn('More than 15 minutes since last run, resetting backoff');
+            currentBackoff = 0;
           }
-        }, nextInterval);
+          
+          // Store this run time
+          global.lastRunTime = Date.now();
+          
+          // Adjust interval based on usage vs target
+          let nextInterval = baseIntervalMs;
+          
+          if (currentUsage > targetUsage + 5) {
+            // We're ahead of schedule, slow down
+            const slowdownFactor = 1 + ((currentUsage - targetUsage) / 20);
+            nextInterval = baseIntervalMs * slowdownFactor;
+            logger.info(`Ahead of target usage (${currentUsage}/${targetUsage}), slowing down by factor of ${slowdownFactor.toFixed(2)}`);
+          } else if (currentUsage < targetUsage - 5 && currentUsage < 180) {
+            // We're behind schedule, speed up (but don't exceed 90% of daily limit)
+            const speedupFactor = Math.max(0.5, 1 - ((targetUsage - currentUsage) / 40));
+            nextInterval = baseIntervalMs * speedupFactor;
+            logger.info(`Behind target usage (${currentUsage}/${targetUsage}), speeding up by factor of ${speedupFactor.toFixed(2)}`);
+          }
+          
+          // IMPORTANT: Ensure minimum interval is being enforced
+          // Never go below POST_INTERVAL/2 to prevent too frequent updates
+          nextInterval = Math.max(nextInterval, POST_INTERVAL/2);
+          
+          // Ensure we don't exceed daily limit
+          if (currentUsage >= 195) {
+            // Near daily limit, wait until tomorrow
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 5, 0, 0); // 12:05 AM tomorrow
+            
+            nextInterval = tomorrow.getTime() - now.getTime();
+            logger.warn(`Daily limit nearly reached (${currentUsage}/200). Waiting until tomorrow.`);
+          }
+          
+          logger.info(`Scheduling next news update in ${(nextInterval/60000).toFixed(1)} minutes`);
+          
+          // Schedule the next run
+          bot.newsUpdateTimeoutId = setTimeout(async () => {
+            try {
+              // Check if we've hit rate limits today
+              const today = new Date().toISOString().split('T')[0];
+              const rateLimitKey = `rateLimit_${today}`;
+              const currentUsage = global[rateLimitKey] || 0;
+              
+              if (currentUsage >= 195) {
+                logger.warn(`Daily limit reached (${currentUsage}/200). Skipping news update.`);
+                // Even when skipping, make sure we schedule the next attempt
+                scheduleNextRun();
+              } else {
+                logger.info(`Running scheduled news update for ${bot.username}`);
+                const result = await bot.processNewsUpdate();
+                
+                // Log the result
+                if (!result.success) {
+                  logger.error(`News update failed: ${result.error || 'Unknown error'}`);
+                } else if (result.rateLimited) {
+                  logger.warn(`News update encountered rate limiting`);
+                } else {
+                  logger.info(`News update completed successfully`);
+                }
+                
+                // Always schedule the next run
+                scheduleNextRun();
+              }
+            } catch (error) {
+              logger.error(`Error during scheduled news update: ${error.message}`);
+              // Even after errors, schedule the next run
+              scheduleNextRun();
+            }
+          }, nextInterval);
+        } catch (scheduleError) {
+          // Catch any error in the scheduling logic itself
+          logger.error(`Error in scheduling logic: ${scheduleError.message}`);
+          // Use a simple fixed interval as fallback
+          logger.info(`Falling back to fixed ${POST_INTERVAL/60000} minute interval`);
+          bot.newsUpdateTimeoutId = setTimeout(() => scheduleNextRun(), POST_INTERVAL);
+        }
       };
       
       // Start the scheduling loop
