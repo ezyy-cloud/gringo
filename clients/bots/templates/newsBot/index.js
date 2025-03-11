@@ -69,6 +69,10 @@ const POST_INTERVAL = 1000 * 60 * 10; // 10 minutes in milliseconds
 // Force reset backoff on startup to ensure smooth operation
 currentBackoff = 0;
 
+// Add watchdog timer to catch stuck processes
+let runWatchdogTimer = null;
+const WATCHDOG_TIMEOUT = 5 * 60 * 1000; // 5 minute watchdog timeout
+
 // Function to calculate exponential backoff with jitter
 function calculateBackoff(attempt = 1) {
   // Exponential backoff: base * 2^attempt
@@ -222,15 +226,33 @@ module.exports = {
       // Process news update on schedule
       processNewsUpdate: async (isStartup = false) => {
         try {
+          // Set up watchdog timer to catch stuck processes
+          if (runWatchdogTimer) {
+            clearTimeout(runWatchdogTimer);
+          }
+          
+          runWatchdogTimer = setTimeout(() => {
+            logger.error("WATCHDOG ALERT: News update process taking too long, forcing completion");
+            // Force schedule next run to prevent getting stuck
+            if (typeof scheduleNextRun === 'function') {
+              logger.info("WATCHDOG: Scheduling next run to recover from stuck state");
+              scheduleNextRun();
+            }
+          }, WATCHDOG_TIMEOUT);
+          
           // Skip updates if current backoff is high (severe rate limiting)
           if (currentBackoff > 5 * 60 * 1000) { // Skip if backoff is > 5 minutes
             logger.warn(`Skipping scheduled news update due to high backoff (${currentBackoff/1000}s)`);
+            clearTimeout(runWatchdogTimer);
             return { skipped: true, backoffMs: currentBackoff };
           }
           
           // Run the bot
           logger.info(`Processing news update for ${bot.username}`);
           const result = await bot.run(isStartup);
+          
+          // Clear watchdog timer after successful completion
+          clearTimeout(runWatchdogTimer);
           
           // If we got rate limited during the run, schedule the next run with increased delay
           if (result.rateLimited) {
@@ -240,6 +262,8 @@ module.exports = {
           return result;
         } catch (error) {
           logger.error(`Error in processNewsUpdate: ${error.message}`);
+          // Clear watchdog timer after error
+          clearTimeout(runWatchdogTimer);
           // Increase backoff for errors too
           bot.increaseBackoff();
           return { success: false, error: error.message };
@@ -319,114 +343,134 @@ module.exports = {
 
       // Main run function for the bot
       run: async (isStartup = false) => {
+        // Set a timeout promise to ensure the function doesn't run too long
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('News bot run timed out after 4 minutes')), 4 * 60 * 1000);
+        });
+        
         try {
-          logger.info('News bot run starting');
-          
-          // 1. Fetch news from service
-          const newsItems = await newsService.getNews(bot.config, isStartup);
-          logger.info(`Fetched ${newsItems.length} news items`);
-          
-          // Filter out items without images FIRST
-          const itemsWithImages = newsItems.filter(item => {
-            if (!item.image_url) {
-              logger.info(`Filtering out news item without image: "${item.title}"`);
-              return false;
-            }
-            return true;
-          });
-          
-          logger.info(`Found ${itemsWithImages.length} news items with images`);
-          
-          // Set max items to process
-          const maxItems = bot.config.maxNewsItemsPerRun || 3;
-          const itemsToProcess = itemsWithImages.slice(0, maxItems);
-          
-          // Track rate limiting for this run
-          let encounteredRateLimit = false;
-          
-          // 2. Process each news item
-          for (const newsItem of itemsToProcess) {
-            try {
-              // Process the news item (extract location, format content)
-              const processedItem = await bot.processNewsItem(newsItem);
-              
-              // Verify location has coordinates
-              if (bot.config.requireLocation && 
-                  (!processedItem.location || 
-                   !processedItem.location.latitude || 
-                   !processedItem.location.longitude)) {
-                logger.info(`Skipping news item due to missing location: "${processedItem.title}"`);
-                continue;
-              }
-              
-              // Ensure location has coordinates if present
-              if (processedItem.location && 
-                  (!processedItem.location.latitude || 
-                   !processedItem.location.longitude)) {
-                logger.info(`Location found but missing coordinates for: "${processedItem.title}"`);
+          // Use Promise.race to ensure the run function doesn't hang indefinitely
+          return await Promise.race([
+            (async () => {
+              try {
+                logger.info('News bot run starting');
                 
-                // Try geocoding again if there's a location name
-                if (processedItem.location.name) {
-                  const geocodedLocation = await locationService.geocodeLocation(processedItem.location.name);
-                  if (geocodedLocation) {
-                    processedItem.location = {
-                      ...processedItem.location,
-                      ...geocodedLocation
-                    };
-                    logger.info(`Successfully added coordinates to location`);
+                // 1. Fetch news from service
+                const newsItems = await newsService.getNews(bot.config, isStartup);
+                logger.info(`Fetched ${newsItems.length} news items`);
+                
+                // Filter out items without images FIRST
+                const itemsWithImages = newsItems.filter(item => {
+                  if (!item.image_url) {
+                    logger.info(`Filtering out news item without image: "${item.title}"`);
+                    return false;
+                  }
+                  return true;
+                });
+                
+                logger.info(`Found ${itemsWithImages.length} news items with images`);
+                
+                // Set max items to process
+                const maxItems = bot.config.maxNewsItemsPerRun || 3;
+                const itemsToProcess = itemsWithImages.slice(0, maxItems);
+                
+                // Track rate limiting for this run
+                let encounteredRateLimit = false;
+                
+                // 2. Process each news item
+                for (const newsItem of itemsToProcess) {
+                  try {
+                    // Process the news item (extract location, format content)
+                    const processedItem = await bot.processNewsItem(newsItem);
+                    
+                    // Verify location has coordinates
+                    if (bot.config.requireLocation && 
+                        (!processedItem.location || 
+                         !processedItem.location.latitude || 
+                         !processedItem.location.longitude)) {
+                      logger.info(`Skipping news item due to missing location: "${processedItem.title}"`);
+                      continue;
+                    }
+                    
+                    // Ensure location has coordinates if present
+                    if (processedItem.location && 
+                        (!processedItem.location.latitude || 
+                         !processedItem.location.longitude)) {
+                      logger.info(`Location found but missing coordinates for: "${processedItem.title}"`);
+                      
+                      // Try geocoding again if there's a location name
+                      if (processedItem.location.name) {
+                        const geocodedLocation = await locationService.geocodeLocation(processedItem.location.name);
+                        if (geocodedLocation) {
+                          processedItem.location = {
+                            ...processedItem.location,
+                            ...geocodedLocation
+                          };
+                          logger.info(`Successfully added coordinates to location`);
+                        }
+                      }
+                    }
+                    
+                    // 3. Post the news item
+                    const result = await bot.postNewsItem(processedItem);
+                    
+                    if (result.success) {
+                      logger.info(`Successfully posted news item: "${processedItem.title}"`);
+                      // Reset backoff after successful post
+                      bot.resetBackoff();
+                    } else if (result.rateLimited) {
+                      logger.warn(`Rate limited when posting: "${processedItem.title}". Retry after ${result.retryAfter}s`);
+                      // Increase backoff time
+                      bot.increaseBackoff();
+                      // Set flag to prevent processing more items in this run
+                      encounteredRateLimit = true;
+                      // Break the loop to stop processing more items
+                      break;
+                    } else if (result.skipped) {
+                      logger.info(`Skipped news item: ${result.error}`);
+                    } else {
+                      logger.error(`Failed to post news item: ${result.error}`);
+                    }
+                    
+                    // If we encountered rate limiting, don't process more items
+                    if (encounteredRateLimit) {
+                      logger.warn('Stopping news processing due to rate limiting');
+                      break;
+                    }
+                    
+                    // Add delay between posts - use dynamically calculated delay
+                    const delay = bot.getCurrentDelay();
+                    logger.info(`Waiting ${delay/1000} seconds before processing next item`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                  } catch (itemError) {
+                    logger.error(`Error processing news item: ${itemError.message}`);
                   }
                 }
+                
+                logger.info('News bot run completed');
+                
+                // Return status including rate limit info
+                return {
+                  success: true,
+                  rateLimited: encounteredRateLimit,
+                  backoffMs: currentBackoff
+                };
+              } catch (error) {
+                logger.error(`Error in news bot run: ${error.message}`);
+                return {
+                  success: false,
+                  error: error.message
+                };
               }
-              
-              // 3. Post the news item
-              const result = await bot.postNewsItem(processedItem);
-              
-              if (result.success) {
-                logger.info(`Successfully posted news item: "${processedItem.title}"`);
-                // Reset backoff after successful post
-                bot.resetBackoff();
-              } else if (result.rateLimited) {
-                logger.warn(`Rate limited when posting: "${processedItem.title}". Retry after ${result.retryAfter}s`);
-                // Increase backoff time
-                bot.increaseBackoff();
-                // Set flag to prevent processing more items in this run
-                encounteredRateLimit = true;
-                // Break the loop to stop processing more items
-                break;
-              } else if (result.skipped) {
-                logger.info(`Skipped news item: ${result.error}`);
-              } else {
-                logger.error(`Failed to post news item: ${result.error}`);
-              }
-              
-              // If we encountered rate limiting, don't process more items
-              if (encounteredRateLimit) {
-                logger.warn('Stopping news processing due to rate limiting');
-                break;
-              }
-              
-              // Add delay between posts - use dynamically calculated delay
-              const delay = bot.getCurrentDelay();
-              logger.info(`Waiting ${delay/1000} seconds before processing next item`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            } catch (itemError) {
-              logger.error(`Error processing news item: ${itemError.message}`);
-            }
-          }
-          
-          logger.info('News bot run completed');
-          
-          // Return status including rate limit info
-          return {
-            success: true,
-            rateLimited: encounteredRateLimit,
-            backoffMs: currentBackoff
-          };
-        } catch (error) {
-          logger.error(`Error in news bot run: ${error.message}`);
+            })(),
+            timeoutPromise
+          ]);
+        } catch (timeoutError) {
+          logger.error(`TIMEOUT ERROR: ${timeoutError.message}`);
           return {
             success: false,
-            error: error.message
+            error: timeoutError.message,
+            timeout: true
           };
         }
       }
@@ -474,6 +518,9 @@ module.exports = {
       // Schedule the next run regardless of success/failure
       const scheduleNextRun = () => {
         try {
+          // Mark the time we scheduled this run
+          global.lastScheduleTime = Date.now();
+          
           // Get current usage and target
           const today = new Date().toISOString().split('T')[0];
           const rateLimitKey = `rateLimit_${today}`;
@@ -523,9 +570,24 @@ module.exports = {
           
           logger.info(`Scheduling next news update in ${(nextInterval/60000).toFixed(1)} minutes`);
           
-          // Schedule the next run
+          // Clear any existing timeout first to prevent duplicates
+          if (bot.newsUpdateTimeoutId) {
+            clearTimeout(bot.newsUpdateTimeoutId);
+          }
+          
+          // Schedule the next run with a safety wrapper
           bot.newsUpdateTimeoutId = setTimeout(async () => {
             try {
+              // Set up a watchdog for this scheduled run
+              const scheduleWatchdog = setTimeout(() => {
+                logger.error("WATCHDOG ALERT: Scheduled news update watchdog triggered");
+                // Force a new schedule
+                if (global.lastScheduleTime && (Date.now() - global.lastScheduleTime > 15 * 60 * 1000)) {
+                  logger.error("WATCHDOG: Last schedule was over 15 minutes ago, forcing reschedule");
+                  scheduleNextRun();
+                }
+              }, WATCHDOG_TIMEOUT);
+              
               // Check if we've hit rate limits today
               const today = new Date().toISOString().split('T')[0];
               const rateLimitKey = `rateLimit_${today}`;
@@ -533,11 +595,24 @@ module.exports = {
               
               if (currentUsage >= 195) {
                 logger.warn(`Daily limit reached (${currentUsage}/200). Skipping news update.`);
+                clearTimeout(scheduleWatchdog);
                 // Even when skipping, make sure we schedule the next attempt
                 scheduleNextRun();
               } else {
                 logger.info(`Running scheduled news update for ${bot.username}`);
+                
+                // Set a timeout for the actual process
+                const processTimeout = setTimeout(() => {
+                  logger.error("ERROR: News update process timed out after 4 minutes");
+                  // Force next schedule
+                  scheduleNextRun();
+                }, 4 * 60 * 1000);
+                
                 const result = await bot.processNewsUpdate();
+                
+                // Clear timeout after completion
+                clearTimeout(processTimeout);
+                clearTimeout(scheduleWatchdog);
                 
                 // Log the result
                 if (!result.success) {
@@ -557,11 +632,34 @@ module.exports = {
               scheduleNextRun();
             }
           }, nextInterval);
+          
+          // Set up a watchdog for the entire scheduling system that will recover if nothing happens
+          setTimeout(() => {
+            if (global.lastRunTime && (Date.now() - global.lastRunTime > 30 * 60 * 1000)) {
+              logger.error("GLOBAL WATCHDOG: No activity for 30 minutes, forcing system restart");
+              // Force a full reset
+              currentBackoff = 0;
+              if (bot.newsUpdateTimeoutId) {
+                clearTimeout(bot.newsUpdateTimeoutId);
+              }
+              
+              // Immediate run followed by rescheduling
+              bot.processNewsUpdate(true).finally(() => {
+                scheduleNextRun();
+              });
+            }
+          }, 30 * 60 * 1000); // Check every 30 minutes
         } catch (scheduleError) {
           // Catch any error in the scheduling logic itself
           logger.error(`Error in scheduling logic: ${scheduleError.message}`);
           // Use a simple fixed interval as fallback
           logger.info(`Falling back to fixed ${POST_INTERVAL/60000} minute interval`);
+          
+          // Clear any existing timeout first
+          if (bot.newsUpdateTimeoutId) {
+            clearTimeout(bot.newsUpdateTimeoutId);
+          }
+          
           bot.newsUpdateTimeoutId = setTimeout(() => scheduleNextRun(), POST_INTERVAL);
         }
       };
