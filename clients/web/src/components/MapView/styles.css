@@ -553,8 +553,8 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .time-preset-indicator {
-    top: 60px;
-    left: 10px;
+    top: 90px;
+    right: 10px;
     right: auto;
   }
   
@@ -1148,7 +1148,7 @@
 .map-action-buttons {
   position: absolute;
   right: 20px;
-  bottom: 30px;
+  bottom: 50px;
   display: flex;
   flex-direction: column;
   align-items: center;
