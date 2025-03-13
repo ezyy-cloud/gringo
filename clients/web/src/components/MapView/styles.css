@@ -555,7 +555,6 @@
   .time-preset-indicator {
     top: 90px;
     right: 10px;
-    right: auto;
   }
   
   .location-control-button {
@@ -1148,7 +1147,7 @@
 .map-action-buttons {
   position: absolute;
   right: 20px;
-  bottom: 50px;
+  bottom: 70px;
   display: flex;
   flex-direction: column;
   align-items: center;
