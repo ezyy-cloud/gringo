@@ -390,62 +390,342 @@
 /* Map Controls Container */
 .map-controls {
   position: absolute;
-  bottom: 30px;
+  top: 10px;
   left: 10px;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 5;
+  gap: 8px;
 }
 
-/* Dark Mode Toggle Button */
-.mode-toggle-btn {
-  padding: 10px;
-  width: 40px;
-  height: 40px;
-  background-color: white;
-  border: none;
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+.map-control-button {
   display: flex;
   align-items: center;
   justify-content: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
   cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #333;
   transition: all 0.2s ease;
-  font-size: 16px;
 }
 
-.mode-toggle-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+.map-control-button:hover {
+  background-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
 }
 
-.mode-toggle-btn:active {
-  transform: translateY(0);
+.map-control-button svg {
+  margin-right: 5px;
 }
 
-.mode-toggle-btn.dark {
-  background-color: #333;
+.map-control-button.active {
+  background-color: rgba(240, 248, 255, 1);
+  border: 1px solid rgba(70, 130, 180, 0.5);
+}
+
+/* Time Indicator in top right */
+.time-preset-indicator {
+  position: absolute;
+  top: 90px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.time-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  padding: 5px 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #333;
+  font-size: 13px;
+}
+
+.time-indicator svg {
+  margin-right: 5px;
+}
+
+.time-indicator.day {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333;
+}
+
+.time-indicator.dawn {
+  background-color: rgba(255, 230, 200, 0.9);
+  color: #734d26;
+}
+
+.time-indicator.dusk {
+  background-color: rgba(255, 210, 180, 0.9);
+  color: #734d26;
+}
+
+.time-indicator.night {
+  background-color: rgba(20, 30, 50, 0.9);
+  color: #e0e6ff;
+}
+
+/* User location button */
+.location-control-button {
+  position: absolute;
+  bottom: 80px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #1877f2; /* Changed from #333 to blue (#1877f2) */
+  font-size: 18px; /* Make the icon larger */
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.location-control-button:hover {
+  background-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Compose message button - bottom right */
+.compose-message-button {
+  position: absolute;
+  bottom: 20px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  background-color: #1e88e5;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  z-index: 1;
+}
+
+.compose-message-button:hover {
+  background-color: #1976d2;
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode styles */
+.dark-mode .map-control-button,
+.dark-mode .time-indicator:not(.night) {
+  background-color: rgba(40, 44, 52, 0.9);
+  color: #e0e6ff;
+}
+
+.dark-mode .location-control-button {
+  background-color: rgba(40, 44, 52, 0.9);
+  color: #4a90e2; /* Slightly lighter blue for dark mode */
+}
+
+.dark-mode .time-indicator.night {
+  background-color: rgba(10, 15, 25, 0.9);
+}
+
+.dark-mode .compose-message-button {
+  background-color: #0d47a1;
+}
+
+.dark-mode .compose-message-button:hover {
+  background-color: #1565c0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .time-preset-indicator {
+    top: 60px;
+    left: 10px;
+    right: auto;
+  }
+  
+  .location-control-button {
+    bottom: 75px;
+    right: 10px;
+  }
+  
+  .compose-message-button {
+    bottom: 15px;
+    right: 10px;
+  }
+}
+
+/* Add styles for the globe view */
+.map-container.globe-view {
+  background-color: #000;
+  background-image: linear-gradient(to bottom, #00111e, #000);
+}
+
+/* Styles for the rectangular globe canvas */
+.globe-view .mapboxgl-canvas {
+  border-radius: 0;
+  box-shadow: 0 0 50px rgba(0, 140, 255, 0.15), 0 0 100px rgba(0, 30, 60, 0.2);
+  border: 1px solid rgba(70, 130, 180, 0.2);
+}
+
+/* Style the active globe button */
+.map-control-button.active svg {
+  fill: rgba(0, 120, 255, 0.3);
+}
+
+/* Add a pulsing animation to the globe button when active */
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(0, 140, 255, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 140, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 140, 255, 0); }
+}
+
+.map-control-button.active {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Light preset indicator styling */
+.light-preset-indicator {
+  margin: 8px 0;
+  padding: 8px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: center;
+}
+
+.dark-mode .light-preset-indicator {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.light-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 6px 10px;
+  border-radius: 20px;
+  color: #333;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.dark-mode .light-indicator {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #e4e6eb;
+}
+
+.light-indicator svg {
+  width: 18px;
+  height: 18px;
+}
+
+.light-indicator.day {
+  color: #ff8c00;
+}
+
+.light-indicator.dawn {
+  color: #ff6347;
+}
+
+.light-indicator.dusk {
+  color: #9370db;
+}
+
+.light-indicator.night {
+  color: #4a90e2;
+}
+
+.dark-mode .light-indicator.day {
+  color: #ffd700;
+}
+
+.dark-mode .light-indicator.dawn {
+  color: #ff8c69;
+}
+
+.dark-mode .light-indicator.dusk {
+  color: #b39ddb;
+}
+
+.dark-mode .light-indicator.night {
+  color: #64b5f6;
+}
+
+.light-label {
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* Auto light preset button styling */
+.map-control-button.auto-light {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+}
+
+.map-control-button.auto-light.active {
+  background-color: #4a90e2;
   color: white;
 }
 
-/* Center on Me button - update to be an icon-only button positioned above FAB */
+.dark-mode .map-control-button.auto-light {
+  background-color: #3a3b3c;
+}
+
+.dark-mode .map-control-button.auto-light.active {
+  background-color: #4a90e2;
+}
+
+/* Light preset controls */
+.light-preset-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .light-preset-controls {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Keep old center-on-me button styling for reference, can be removed */
 .center-on-me-btn {
-  position: fixed;
-  bottom: 100px; /* Position it 40px above the FAB (FAB is at 30px from bottom, plus 60px height, plus 10px gap) */
-  right: 40px; /* Adjusted to align vertical centers (FAB is 60px wide at right 30px, this is 40px wide) */
+  position: absolute;
+  bottom: 100px;
+  right: 10px;
+  width: 45px;
+  height: 45px;
   background-color: white;
   border: none;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
   z-index: 10;
-  color: #1877f2; /* Facebook blue to match other buttons */
+  color: #666;
   transition: all 0.2s ease;
 }
 
@@ -718,4 +998,179 @@
     width: 20px;
     height: 20px;
   }
+}
+
+/* Remove or update the existing toggle-3d-btn to avoid conflicts */
+.toggle-3d-btn {
+  position: absolute;
+  bottom: 156px;
+  right: 10px;
+  width: 45px;
+  height: 45px;
+  background-color: white;
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.toggle-3d-btn.active {
+  background-color: #1877f2;
+  color: white;
+}
+
+.dark-mode .toggle-3d-btn {
+  background-color: #242526;
+  color: #e4e6eb;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .toggle-3d-btn.active {
+  background-color: #4a90e2;
+  color: white;
+}
+
+.toggle-3d-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-3d-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* 3D loading and hint styling */
+.three-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 100;
+}
+
+.dark-mode .three-loading {
+  background-color: rgba(36, 37, 38, 0.9);
+  color: #e4e6eb;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.three-loading-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1877f2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+.dark-mode .three-loading-spinner {
+  border: 3px solid #3a3b3c;
+  border-top: 3px solid #4a90e2;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.three-view-hint {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  z-index: 100;
+  text-align: center;
+  max-width: 320px;
+}
+
+.three-view-hint.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Add these styles for the globe view */
+.map-container.globe-view {
+  background-color: #000;
+  /* Linear gradient for rectangular container */
+  background-image: linear-gradient(to bottom, #00111e, #000);
+}
+
+/* Styles for the rectangular globe canvas */
+.globe-view .mapboxgl-canvas {
+  /* No border radius for rectangular shape */
+  border-radius: 0;
+  /* Enhanced glow effect */
+  box-shadow: 0 0 50px rgba(0, 140, 255, 0.15), 0 0 100px rgba(0, 30, 60, 0.2);
+  /* Subtle border for definition */
+  border: 1px solid rgba(70, 130, 180, 0.2);
+}
+
+/* Style the active globe button */
+.map-control-button.active svg {
+  fill: rgba(0, 120, 255, 0.3);
+}
+
+/* Add a pulsing animation to the globe button when active */
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(0, 140, 255, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 140, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 140, 255, 0); }
+}
+
+.map-control-button.active {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Styles for the map buttons group */
+.map-action-buttons {
+  position: absolute;
+  right: 20px;
+  bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 5;
+}
+
+.compose-button-container {
+  margin-top: 10px;
+}
+
+.compose-button-container .floating-action-button {
+  position: relative;
+  bottom: auto;
+  right: auto;
+  margin: 0;
+  /* Make it stand out more */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+  transform-origin: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.compose-button-container .floating-action-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 } 

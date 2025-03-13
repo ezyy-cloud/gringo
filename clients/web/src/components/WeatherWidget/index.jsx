@@ -5,7 +5,7 @@ import { WiDaySunny, WiCloudy, WiRain, WiSnow, WiThunderstorm, WiFog } from "rea
 import WeatherForecastModal from '../WeatherForecastModal';
 import './styles.css';
 
-const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
+const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => {
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -71,6 +71,11 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
         setError(null);
         lastCoordsRef.current = { latitude, longitude }; // Update last successful coordinates
         hasInitialFetchRef.current = true;
+        
+        // Call the callback to notify the parent component about the weather update
+        if (onWeatherUpdate && typeof onWeatherUpdate === 'function') {
+          onWeatherUpdate(data);
+        }
       } catch (err) {
         const errorMessage = 'Could not load weather data';
         console.error('🌤️ Weather API Error:', {
@@ -146,7 +151,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
         console.log('🌤️ Weather API: Cleanup - cleared fetch timeout');
       }
     };
-  }, [latitude, longitude, weather]);
+  }, [latitude, longitude, weather, onWeatherUpdate]);
 
   const handleWidgetClick = () => {
     if (showDetails) {
@@ -230,13 +235,15 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode }) => {
 };
 
 WeatherWidget.propTypes = {
-  latitude: PropTypes.number,
-  longitude: PropTypes.number,
-  isDarkMode: PropTypes.bool
+  latitude: PropTypes.number.isRequired,
+  longitude: PropTypes.number.isRequired,
+  isDarkMode: PropTypes.bool,
+  onWeatherUpdate: PropTypes.func
 };
 
 WeatherWidget.defaultProps = {
-  isDarkMode: false
+  isDarkMode: false,
+  onWeatherUpdate: null
 };
 
 export default WeatherWidget; 

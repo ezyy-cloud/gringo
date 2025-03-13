@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import NavigationHeader from '../NavigationHeader';
 import MapView from '../MapView';
-import FloatingActionButton from '../FloatingActionButton';
 import MessageModal from '../MessageModal';
 import ProfilePage from '../profile/ProfilePage';
 
@@ -165,13 +164,11 @@ const AppContent = ({
                   isDarkMode={isDarkMode}
                   isLoading={isLoading}
                   onRefreshMap={handleRefreshMap}
+                  onOpenModal={openModal}
                 />
               </div>
             </main>
 
-            {/* Floating Action Button for sharing updates */}
-            <FloatingActionButton onClick={openModal} isDarkMode={isDarkMode} />
-            
             {/* Update Modal */}
             <MessageModal 
               isOpen={isModalOpen} 
