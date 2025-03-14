@@ -146,7 +146,6 @@ function App() {
     console.log(`🔄 fetchMessagesWithoutReset: Starting to fetch messages (Count: ${fetchCount + 1})`);
     
     try {
-      setIsLoading(true);
       
       console.log('🔄 fetchMessagesWithoutReset: About to call apiService.getMessages()');
       const response = await apiService.getMessages();
