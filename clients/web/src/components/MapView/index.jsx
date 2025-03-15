@@ -1539,12 +1539,15 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           <button 
             className="location-control-button"
             onClick={() => {
-              setViewState({
-                longitude: userLocation.longitude,
-                latitude: userLocation.latitude,
-                zoom: 14, // Closer zoom for user's location
-                pitch: is3DMode ? 45 : 0, // Maintain pitch if in 3D mode
-                bearing: 0 // Set to 0 to prevent the "null" bearing error
+              mapRef.current.getMap().flyTo({
+                center: [userLocation.longitude, userLocation.latitude],
+                zoom: 14,
+                pitch: is3DMode ? 45 : 0,
+                bearing: 0,
+                curve: 2.0,
+                easing: (t) => t,
+                animate: true,
+                essential: true,
               });
             }}
             title="Go to your location"
