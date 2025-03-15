@@ -48,12 +48,39 @@ class BaseSocketClient {
       this.socket = null;
     }
     
-    // Determine if we're using a relative URL (for proxy) or full URL (direct connection)
+    // Normalize server URL - essential for reliable connections
+    let effectiveServerUrl = this.serverUrl;
+    
+    // Handle null, empty or invalid URLs gracefully
+    if (!effectiveServerUrl || effectiveServerUrl === '/' || effectiveServerUrl === '') {
+      effectiveServerUrl = window.location.origin;
+      console.log(`🔌 BaseSocketClient: Empty or relative URL detected, using window.location.origin: ${effectiveServerUrl}`);
+    }
+    
+    // Check for valid URL format
+    try {
+      // Normalize URL to ensure it's an origin (protocol + host + port)
+      const urlObj = new URL(effectiveServerUrl);
+      effectiveServerUrl = urlObj.origin; // Just protocol + host + port
+      console.log(`🔌 BaseSocketClient: Normalized server URL to: ${effectiveServerUrl}`);
+    } catch (error) {
+      console.error(`🔌 BaseSocketClient: Invalid URL format: ${effectiveServerUrl}, falling back to window.location.origin`);
+      effectiveServerUrl = window.location.origin;
+    }
+    
+    // Store for logging purposes
+    const connectionUrl = effectiveServerUrl;
     const isRelativeUrl = this.serverUrl === '/' || this.serverUrl === '';
-    const connectionUrl = isRelativeUrl ? window.location.origin : this.serverUrl;
     
     console.log(`🔌 BaseSocketClient: Initializing socket connection to: "${connectionUrl}"`);
     console.log(`🔌 BaseSocketClient: Using ${isRelativeUrl ? 'relative' : 'absolute'} URL mode`);
+    
+    // Validate URL before proceeding
+    if (!connectionUrl) {
+      console.error('🔌 BaseSocketClient: Invalid connection URL (null or empty)');
+      this.connectionState = this.CONNECTION_STATES.DISCONNECTED;
+      return false;
+    }
     
     // Configure options based on connection type
     const socketOptions = {
@@ -62,19 +89,10 @@ class BaseSocketClient {
       autoConnect: false,
     };
     
-    // For relative URLs (proxy), let the browser handle the connection
-    if (isRelativeUrl) {
-      // When using the proxy through Vite, we need these options
-      socketOptions.transports = ['websocket', 'polling'];
-    } else {
-      // For direct connection, use these additional options
-      socketOptions.transports = ['websocket', 'polling'];
-    }
-    
     try {
       // Create the socket instance
       this.socket = io(connectionUrl, socketOptions);
-      console.log('🔌 BaseSocketClient: Socket instance created successfully');
+      console.log('🔌 BaseSocketClient: Socket instance created successfully with URL:', connectionUrl);
       
       return true;
     } catch (error) {
@@ -95,7 +113,14 @@ class BaseSocketClient {
     // Initialize socket if needed
     if (!this.socket) {
       console.log('🔌 BaseSocketClient: Socket not initialized, initializing now');
-      this.initialize();
+      const initSuccess = this.initialize();
+      if (!initSuccess) {
+        console.error('🔌 BaseSocketClient: Socket initialization failed, cannot connect');
+        if (callbacks.onConnectError) {
+          callbacks.onConnectError(new Error('Socket initialization failed'));
+        }
+        return;
+      }
     }
     
     if (username) {
@@ -103,7 +128,7 @@ class BaseSocketClient {
       this.currentUsername = username;
     }
     
-    // Only proceed if we're not already connected or connecting
+    // Only proceed if we're not already connected
     if (this.connectionState === this.CONNECTION_STATES.CONNECTED) {
       console.log('🔌 BaseSocketClient: Already connected, calling onConnect callback');
       if (callbacks.onConnect) callbacks.onConnect();
@@ -135,6 +160,21 @@ class BaseSocketClient {
     
     // Connect to the server
     console.log('🔌 BaseSocketClient: Connecting to server:', this.serverUrl);
+    
+    // Handle connection timeout manually since socket.io timeout doesn't always work
+    const connectionTimeout = setTimeout(() => {
+      if (this.connectionState !== this.CONNECTION_STATES.CONNECTED) {
+        console.log('🔌 BaseSocketClient: Connection timeout after 20 seconds');
+        if (callbacks.onConnectError) {
+          callbacks.onConnectError(new Error('Connection timeout'));
+        }
+      }
+    }, 20000);
+    
+    // Store connection timeout to clear it later
+    this.connectionTimeout = connectionTimeout;
+    
+    // Attempt connection
     this.socket.connect();
   }
 
@@ -183,6 +223,12 @@ class BaseSocketClient {
     this.socket.on('connect', () => {
       console.log('🔌 BaseSocketClient: Socket connected event fired');
       this.updateConnectionState(this.CONNECTION_STATES.CONNECTED);
+      
+      // Clear connection timeout if it exists
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
       
       // Authenticate if we have a username
       if (this.currentUsername) {

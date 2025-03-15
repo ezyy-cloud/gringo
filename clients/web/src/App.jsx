@@ -346,39 +346,66 @@ function App() {
     fetchMessagesWithoutResetRef.current = fetchMessagesWithoutReset;
   }, [fetchMessagesWithoutReset]);
 
-  // Connect socket if user is logged in and socket is not already connected
+  // Add a ref to track socket initialization
+  const socketInitializedRef = useRef(false);
+  
+  // Socket connection management with dependency on user only
   useEffect(() => {
-    // Track connection attempts to prevent excessive reconnection loops
-    const connectionAttemptKey = 'socket_connection_attempt_count';
-    const connectionTimeKey = 'socket_last_connection_time';
-    const maxConnectionAttempts = 3;
-    const connectionCooldownMs = 30000; // 30 seconds
+    // Only initialize if we have a user and haven't already initialized
+    if (!user) return;
     
-    // Skip if user isn't logged in or if socket is already connected
-    if (!user || isConnected) {
+    // Reset socket initialization state if user changes
+    if (socketInitializedRef.current && user.username) {
+      console.log(`⚡ Socket: New user detected (${user.username}), resetting socket initialization state`);
+      socketInitializedRef.current = false;
+    }
+
+    // Skip if we've already initialized for this user
+    if (socketInitializedRef.current) {
+      console.log('⚡ Socket: Socket already initialized for current user, skipping');
       return;
     }
     
-    // Check if we've had too many connection attempts recently
-    const connectionAttempts = parseInt(sessionStorage.getItem(connectionAttemptKey) || '0');
-    const lastConnectionTime = parseInt(sessionStorage.getItem(connectionTimeKey) || '0');
+    // Check if we should connect based on the connection attempt history
+    const connectionAttemptKey = 'socket_connection_attempts';
+    const connectionTimeKey = 'socket_connection_last_attempt';
     const now = Date.now();
     
-    // Reset connection attempts if enough time has passed
-    if (now - lastConnectionTime > connectionCooldownMs) {
-      sessionStorage.setItem(connectionAttemptKey, '0');
-    } 
-    // Prevent excessive reconnection attempts
-    else if (connectionAttempts >= maxConnectionAttempts) {
-      console.log(`⚡ Socket: Too many connection attempts (${connectionAttempts}), cooling down`);
+    // Get connection attempt history
+    const connectionAttemptsStr = sessionStorage.getItem(connectionAttemptKey) || '0';
+    const connectionAttempts = parseInt(connectionAttemptsStr, 10);
+    const lastAttemptStr = sessionStorage.getItem(connectionTimeKey) || '0';
+    const lastAttempt = parseInt(lastAttemptStr, 10);
+    
+    // Define maximum attempts and cooldown period
+    const maxConnectionAttempts = 5;
+    const connectionCooldown = 30000; // Reduced to 30 seconds from 60 seconds
+    
+    // Check if we're in the cooldown period
+    const timeSinceLastAttempt = now - lastAttempt;
+    
+    // Only apply cooldown if we've had multiple connection attempts
+    if (connectionAttempts > 2 && lastAttempt && timeSinceLastAttempt < connectionCooldown) {
+      console.log(`⚡ Socket: Connection attempt too soon (${timeSinceLastAttempt}ms since last attempt), waiting for cooldown`);
       return;
+    } 
+    // Prevent excessive reconnection attempts over time
+    else if (connectionAttempts >= maxConnectionAttempts) {
+      // Reset attempts counter after a full cooldown period to avoid permanent lockout
+      if (timeSinceLastAttempt > connectionCooldown * 2) {
+        console.log(`⚡ Socket: Resetting connection attempts counter after extended cooldown`);
+        sessionStorage.setItem(connectionAttemptKey, '0');
+      } else {
+        console.log(`⚡ Socket: Too many connection attempts (${connectionAttempts}), cooling down`);
+        return;
+      }
     }
     
     // Update connection attempt count and time
     sessionStorage.setItem(connectionAttemptKey, (connectionAttempts + 1).toString());
     sessionStorage.setItem(connectionTimeKey, now.toString());
     
-    console.log('⚡ Socket: Checking server status before connecting');
+    console.log('⚡ Socket: Initializing socket connection for user:', user.username);
     
     try {
       // Define socket callbacks immediately to avoid duplicating code
@@ -387,6 +414,10 @@ function App() {
           console.log('⚡ Socket: Connected successfully');
           setIsConnected(true);
           setConnectionError(null);
+          // Mark as initialized once connection is successful
+          socketInitializedRef.current = true;
+          // Reset connection attempts on successful connection
+          sessionStorage.setItem(connectionAttemptKey, '0');
         },
         onConnectError: (error) => {
           console.error('⚡ Socket: Connection error:', error);
@@ -531,12 +562,10 @@ function App() {
         }
       };
       
-      // Simply connect to the socket - skip the status check which is failing
+      // Connect to the socket
       if (user && user.username) {
         console.log('⚡ Socket: Connecting to socket with username:', user.username);
         socketService.connect(socketCallbacks, user.username);
-        
-        // Don't fetch messages here - we'll fetch them in the onAuthenticated callback if needed
       } else {
         console.error('⚡ Socket: Cannot connect - invalid user or missing username');
         setConnectionError('Cannot connect - invalid user or missing username');
@@ -548,12 +577,17 @@ function App() {
       setIsConnected(false);
     }
     
-    // Clean up function will be called when component unmounts or when user changes
+    // Don't disconnect on component updates - only on unmount
+  }, [user]);
+  
+  // Separate cleanup effect for socket disconnection - only runs on component unmount
+  useEffect(() => {
     return () => {
-      console.log('⚡ Socket: Cleaning up socket connection');
+      console.log('⚡ Socket: Cleaning up socket connection on App unmount');
       socketService.disconnect();
+      socketInitializedRef.current = false;
     };
-  }, [user, isConnected, fetchState, lastFetchTime, navigateToProfile]);
+  }, []);
   
   // Periodically check server connection if in fallback mode
   useEffect(() => {

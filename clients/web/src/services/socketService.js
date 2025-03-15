@@ -1,17 +1,34 @@
 import socketClientFactory from '../socket/SocketClientFactory';
 
-// Server URL - from environment variables or use relative URL for development
-// Using a relative URL will work with the Vite proxy we set up
-const SERVER_URL = '/'; // Using relative URL which will be proxied by Vite
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'; // Keep the full URL for non-socket API calls
+// Server URL configuration
+// 1. Use environment variable if available
+// 2. If not, use window location (enables automatic working in all environments)
+const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
+
+// Create direct socket URL - strip any path components
+const createSocketUrl = (url) => {
+  if (!url) return window.location.origin;
+  
+  try {
+    // Parse the URL to extract just the origin part (protocol + host + port)
+    const urlObj = new URL(url);
+    return urlObj.origin;
+  } catch (e) {
+    console.error('🔌 SocketService: Invalid URL format, using window.location.origin instead');
+    return window.location.origin;
+  }
+};
+
+// Socket server URL (just the origin part of the URL)
+const SOCKET_SERVER_URL = createSocketUrl(API_URL);
 
 // Create a service wrapper for the socket client
 const socketService = {
   // Connect to the server
   connect: (callbacks = {}, username = null) => {
-    console.log('🔌 SocketService: Connecting to socket with relative URL for proxy support');
+    console.log(`🔌 SocketService: Connecting to socket with URL: ${SOCKET_SERVER_URL}`);
     // Get the main socket client from the factory
-    const mainClient = socketClientFactory.getClient('main', 'main', SERVER_URL);
+    const mainClient = socketClientFactory.getClient('main', 'main', SOCKET_SERVER_URL);
     
     // Ensure any existing socket is disconnected first
     if (mainClient.isConnected()) {
@@ -184,6 +201,11 @@ const socketService = {
   // Get the socket ID for identifying the client
   getServerUrl: () => {
     return API_URL;
+  },
+  
+  // Add method to get socket URL specifically
+  getSocketServerUrl: () => {
+    return SOCKET_SERVER_URL;
   },
   
   // Enable fallback mode (for when the server is unreachable)
