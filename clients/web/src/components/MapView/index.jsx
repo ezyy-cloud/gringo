@@ -7,12 +7,16 @@ import { GoHeart, GoHeartFill, GoLocation, GoHome, GoStack } from "react-icons/g
 import AvatarPlaceholder from '../AvatarPlaceholder';
 import WeatherWidget from '../WeatherWidget';
 import FloatingActionButton from '../FloatingActionButton';
-import { timeAgo } from '../../utils/dateUtils';
+import { timeAgo, formatTime } from '../../utils/dateUtils';
 import { renderTextWithLinks } from '../../utils/textUtils.jsx';
 import apiService from '../../services/apiService';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './styles.css';
 import '../MapView3D/styles.css';
+import { getSolarTimes, getLightingPreset } from '../../utils/solarUtils';
+import VesselLayer from '../VesselLayer';
+import VesselTrackingInit from '../VesselTrackingInit';
+import vesselService from '../../services/vesselService';
 
 // Weather effect settings for different weather conditions
 const WEATHER_EFFECTS = {
@@ -311,8 +315,8 @@ const getLightPresetForTime = (date, latitude, longitude) => {
     
     console.log(`Local time at ${latitude.toFixed(2)}, ${longitude.toFixed(2)}: ${localTimeStr}`);
     
-    // Calculate sunrise/sunset more accurately using a solar calculator
-    const {sunrise, sunset, dawn, dusk} = calculateSolarTimes(date, latitude, longitude);
+    // Get solar times using the optimized utility
+    const {sunrise, sunset, dawn, dusk} = getSolarTimes(date, latitude, longitude);
     
     // Convert solar times to minute-of-day for easier comparison
     const sunriseMinutes = sunrise.getHours() * 60 + sunrise.getMinutes();
@@ -353,28 +357,9 @@ const getLightPresetForTime = (date, latitude, longitude) => {
   } catch (error) {
     console.error('Error calculating light preset:', error);
     
-    // Fall back to the simple calculation method on error
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    const totalMinutes = hours * 60 + minutes;
-    
-    // Simplified dawn/dusk times
-    if (totalMinutes >= 330 && totalMinutes <= 390) {
-      return 'dawn'; // 5:30 AM - 6:30 AM
-    } else if (totalMinutes >= 1050 && totalMinutes <= 1110) {
-      return 'dusk'; // 5:30 PM - 6:30 PM
-    } else if (totalMinutes > 390 && totalMinutes < 1050) {
-      return 'day'; // 6:30 AM - 5:30 PM
-    } else {
-      return 'night';
-    }
+    // Fall back to using the direct utility function
+    return getLightingPreset(date, latitude, longitude);
   }
-};
-
-// Helper to format time objects for logging
-const formatTime = (time) => {
-  if (!time) return 'unknown';
-  return `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
 };
 
 // Get timezone from coordinates using a best-effort approach
@@ -418,194 +403,6 @@ const getTimezoneFromCoordinates = (latitude, longitude) => {
   }
 };
 
-// Solar calculations for sunrise, sunset, dawn, and dusk
-const calculateSolarTimes = (date, latitude, longitude) => {
-  try {
-    // Get timezone to ensure we use the right date for calculations
-    const timeZone = getTimezoneFromCoordinates(latitude, longitude);
-    
-    // Get the local date at the location
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric'
-    });
-    
-    // Get local date components
-    const localDateParts = formatter.formatToParts(date);
-    const year = parseInt(localDateParts.find(part => part.type === 'year').value);
-    const month = parseInt(localDateParts.find(part => part.type === 'month').value);
-    const day = parseInt(localDateParts.find(part => part.type === 'day').value);
-    
-    // Create the local date for the location
-    const today = new Date(year, month - 1, day);
-    
-    // Calculate day of year (approximate)
-    const startOfYear = new Date(year, 0, 1);
-    const dayOfYear = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000)) + 1;
-    
-    // NOAA solar calculation
-    // Calculations based on https://www.esrl.noaa.gov/gmd/grad/solcalc/calcdetails.html
-    
-    // Convert latitude and longitude to radians
-    const lat = latitude * (Math.PI / 180);
-    const lng = longitude * (Math.PI / 180);
-    
-    // Time in Julian centuries from 2000-01-01 12:00:00 GMT
-    const jd2000 = 2451545.0;
-    const unixTime2000 = 946728000000; // milliseconds on 2000-01-01 12:00:00 UTC
-    const millisecondsPerDay = 24 * 60 * 60 * 1000;
-    
-    // Calculate current julian day (days since Jan 1, 4713 BCE at noon UTC)
-    const julianDay = (today.getTime() - unixTime2000) / millisecondsPerDay + jd2000;
-    
-    // Calculate solar noon for this day
-    const julianCycle = Math.round(julianDay - 2451545.0 + longitude / 360);
-    const solarNoon = 2451545.0 + julianCycle - longitude / 360;
-    
-    // Calculate the Sun's mean anomaly at noon
-    const meanSolarAnomaly = (357.5291 + 0.98560028 * (solarNoon - 2451545.0)) % 360;
-    const meanSolarAnomalyRad = meanSolarAnomaly * (Math.PI / 180);
-    
-    // Calculate the equation of center
-    const equationCenter = 1.9148 * Math.sin(meanSolarAnomalyRad) +
-                          0.0200 * Math.sin(2 * meanSolarAnomalyRad) +
-                          0.0003 * Math.sin(3 * meanSolarAnomalyRad);
-    
-    // Calculate the Sun's ecliptic longitude
-    const eclipticLongitude = (meanSolarAnomaly + equationCenter + 180 + 102.9372) % 360;
-    const eclipticLongitudeRad = eclipticLongitude * (Math.PI / 180);
-    
-    // Calculate the Sun's declination
-    const sinDeclination = Math.sin(eclipticLongitudeRad) * Math.sin(23.44 * (Math.PI / 180));
-    const sunDeclination = Math.asin(sinDeclination);
-    
-    // Calculate the hour angle
-    const cosHourAngle = (Math.sin(-0.83 * (Math.PI / 180)) - Math.sin(lat) * Math.sin(sunDeclination)) /
-                        (Math.cos(lat) * Math.cos(sunDeclination));
-    
-    // Handle polar day or night
-    if (cosHourAngle > 1) {
-      console.log(`Polar night: no sunrise at ${latitude}, ${longitude}`);
-      return getPolarTimes(date, month, latitude, true);
-    } else if (cosHourAngle < -1) {
-      console.log(`Polar day: no sunset at ${latitude}, ${longitude}`);
-      return getPolarTimes(date, month, latitude, false);
-    }
-    
-    // Calculate sunrise and sunset in hours from solar noon
-    const hourAngle = Math.acos(cosHourAngle) * (180 / Math.PI);
-    
-    // Convert to hours (15 degrees = 1 hour)
-    const hourOffset = hourAngle / 15;
-    
-    // Calculate solar noon in local time
-    // Solar noon is when the sun is at its highest point in the sky
-    const solarNoonLocal = 12 - (longitude % 15) / 15;
-    
-    // Calculate sunrise and sunset times (in hours)
-    const sunriseTime = solarNoonLocal - hourOffset;
-    const sunsetTime = solarNoonLocal + hourOffset;
-    
-    // Convert hours to Date objects for today
-    const createTimeDate = (hourDecimal) => {
-      // Handle times that wrap around to the next or previous day
-      let targetDate = new Date(today);
-      
-      const hours = Math.floor(hourDecimal);
-      const minutes = Math.floor((hourDecimal - hours) * 60);
-      
-      // Handle the potential need to add or subtract a day
-      if (hours < 0) {
-        targetDate.setDate(targetDate.getDate() - 1);
-        targetDate.setHours(hours + 24, minutes, 0, 0);
-      } else if (hours >= 24) {
-        targetDate.setDate(targetDate.getDate() + 1);
-        targetDate.setHours(hours - 24, minutes, 0, 0);
-      } else {
-        targetDate.setHours(hours, minutes, 0, 0);
-      }
-      
-      return targetDate;
-    };
-    
-    // Create Date objects for sunrise, sunset, dawn, and dusk
-    const sunriseDate = createTimeDate(sunriseTime);
-    const sunsetDate = createTimeDate(sunsetTime);
-    
-    // Dawn is 30 minutes before sunrise, dusk is 30 minutes after sunset
-    const dawnDate = new Date(sunriseDate.getTime() - 30 * 60 * 1000);
-    const duskDate = new Date(sunsetDate.getTime() + 30 * 60 * 1000);
-    
-    console.log(`Solar calculation for ${latitude}, ${longitude} (Day ${dayOfYear}):`);
-    console.log(`Timezone: ${timeZone}`);
-    console.log(`Solar mean anomaly: ${meanSolarAnomaly.toFixed(4)}°, Declination: ${(sunDeclination * 180 / Math.PI).toFixed(4)}°`);
-    console.log(`Hour angle: ${hourAngle.toFixed(4)}°, Solar noon: ${solarNoonLocal.toFixed(4)} hours`);
-    console.log(`Sunrise: ${sunriseTime.toFixed(4)} hours, Sunset: ${sunsetTime.toFixed(4)} hours`);
-    
-    return {
-      sunrise: sunriseDate,
-      sunset: sunsetDate,
-      dawn: dawnDate,
-      dusk: duskDate
-    };
-  } catch (error) {
-    console.error('Error calculating solar times:', error);
-    
-    // Fallback to reasonable defaults
-    const fallbackDate = new Date(date);
-    
-    const fallbackSunrise = new Date(fallbackDate);
-    fallbackSunrise.setHours(6, 0, 0, 0);
-    
-    const fallbackSunset = new Date(fallbackDate);
-    fallbackSunset.setHours(18, 0, 0, 0);
-    
-    const fallbackDawn = new Date(fallbackDate);
-    fallbackDawn.setHours(5, 30, 0, 0);
-    
-    const fallbackDusk = new Date(fallbackDate);
-    fallbackDusk.setHours(18, 30, 0, 0);
-    
-    return {
-      sunrise: fallbackSunrise,
-      sunset: fallbackSunset,
-      dawn: fallbackDawn,
-      dusk: fallbackDusk
-    };
-  }
-};
-
-// Helper for polar regions with no sunrise or sunset
-const getPolarTimes = (date, month, latitude, isNight) => {
-  // Create a copy of the date to avoid modifying the original
-  const newDate = new Date(date);
-  
-  // For polar regions, set artificial sunrise/sunset based on date
-  const isSummer = (month >= 4 && month <= 9); // Northern hemisphere summer
-  const isNorthern = latitude > 0;
-  
-  // Determine polar day or night based on hemisphere and season
-  if ((isNorthern && isSummer) || (!isNorthern && !isSummer)) {
-    // Polar day or near-polar bright nights
-    return {
-      sunrise: new Date(newDate.setHours(3, 0, 0, 0)),
-      sunset: new Date(newDate.setHours(21, 0, 0, 0)),
-      dawn: new Date(newDate.setHours(2, 30, 0, 0)),
-      dusk: new Date(newDate.setHours(21, 30, 0, 0))
-    };
-  } else {
-    // Polar night or near-polar short days
-    return {
-      sunrise: new Date(newDate.setHours(10, 0, 0, 0)),
-      sunset: new Date(newDate.setHours(14, 0, 0, 0)),
-      dawn: new Date(newDate.setHours(9, 30, 0, 0)),
-      dusk: new Date(newDate.setHours(14, 30, 0, 0))
-    };
-  }
-};
-
 const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkMode, isLoading, onRefreshMap, onOpenModal }) => {
   // Debug log for received messages
   console.log(`🗺️ MapView: Received ${messages?.length || 0} messages`);
@@ -622,7 +419,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likedMessagesCache, setLikedMessagesCache] = useState(null);
-  const [is3DMode, setIs3DMode] = useState(false);
+  const [is3DMode, setIs3DMode] = useState(true);
   const [is3DLoaded, setIs3DLoaded] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [lightPreset, setLightPreset] = useState('day'); // Default light preset, will be updated automatically
@@ -642,6 +439,29 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
   // State for weather data
   const [currentWeather, setCurrentWeather] = useState(null);
+
+  // State for vessel tracking
+  const [showVesselTracking, setShowVesselTracking] = useState(true);
+  const [vesselTrackingInitialized, setVesselTrackingInitialized] = useState(false);
+  const [weatherEffectsEnabled, setWeatherEffectsEnabled] = useState(true);
+
+  // Automatically initialize vessel tracking when component mounts
+  useEffect(() => {
+    // Auto-initialize vessel tracking when the component mounts
+    const initializeVesselTracking = async () => {
+      try {
+        const response = await vesselService.initializeTracking();
+        if (response.success) {
+          setVesselTrackingInitialized(true);
+          console.log('Vessel tracking initialized automatically');
+        }
+      } catch (error) {
+        console.error('Error auto-initializing vessel tracking:', error);
+      }
+    };
+
+    initializeVesselTracking();
+  }, []);
 
   // Immediately calculate and apply light preset when component mounts
   useEffect(() => {
@@ -762,57 +582,68 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     setSelectedMessage(null); // Close popup after navigation
   };
 
-  // Toggle 3D mode with loading state
-  const toggle3DMode = useCallback(() => {
-    if (!is3DMode) {
-      // When turning on 3D mode, set loading state first
-      setIs3DLoaded(false);
-      
-      // Then enable 3D mode
-      setIs3DMode(true);
-      
-      // Set appropriate pitch for 3D view - this tilts the map to show buildings better
-      setViewState(prev => ({
-        ...prev,
-        pitch: 45, // Tilt the map for 3D view
-        zoom: Math.max(prev.zoom, 15) // Ensure we're zoomed in enough to see buildings
-      }));
-      
-      // Enable 3D objects for Standard style if map is loaded
-      if (mapRef.current?.getMap()?.isStyleLoaded()) {
-        const map = mapRef.current.getMap();
-        map.setConfigProperty('basemap', 'show3dObjects', true);
-      }
-      
-      // Show hint message after 3D mode is loaded
-      setTimeout(() => {
-        setIs3DLoaded(true);
-        // Show hint message briefly
-        setShowHint(true);
-        // Hide it after 5 seconds
-        setTimeout(() => {
-          setShowHint(false);
-        }, 5000);
-      }, 1000);
-    } else {
-      // When turning off, reset the pitch and disable 3D
-      setViewState(prev => ({
-        ...prev,
-        pitch: 0, // Reset tilt
-      }));
-      
-      // Disable 3D objects for Standard style if map is loaded
-      if (mapRef.current?.getMap()?.isStyleLoaded()) {
-        const map = mapRef.current.getMap();
-        map.setConfigProperty('basemap', 'show3dObjects', false);
-      }
-      
-      // Disable 3D mode
-      setIs3DMode(false);
-      setIs3DLoaded(false);
-      setShowHint(false);
+  // Toggle 3D mode
+  const toggle3DMode = () => {
+    setIs3DMode(!is3DMode);
+  };
+  
+  // Handle vessel tracking initialization
+  const handleVesselTrackingInitialized = (success) => {
+    if (success) {
+      setVesselTrackingInitialized(true);
     }
-  }, [is3DMode]);
+  };
+
+  // Handle reset view button click
+  const handleResetView = useCallback(() => {
+    // Reset to default view (global view)
+    setViewState({
+      longitude: 0,  // Center on prime meridian
+      latitude: 20,  // Slight northward tilt for a more natural view
+      zoom: 1.2,     // Zoomed out to see most of the globe
+      pitch: 20,     // Slight pitch for 3D effect
+      bearing: 0
+    });
+    
+    console.log('View reset to default global view');
+  }, []);
+
+  // Handle map style load
+  const handleMapStyleLoad = (map) => {
+    console.log(`Map style loaded, immediately applying light preset: ${lightPreset}`);
+    map.setConfigProperty('basemap', 'lightPreset', lightPreset);
+    
+    // Add terrain source
+    if (!map.getSource('mapbox-dem')) {
+      map.addSource('mapbox-dem', {
+        'type': 'raster-dem',
+        'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        'tileSize': 512,
+        'maxzoom': 14
+      });
+    }
+    
+    // Add sky layer
+    if (!map.getLayer('sky')) {
+      map.addLayer({
+        'id': 'sky',
+        'type': 'sky',
+        'paint': {
+          'sky-type': 'atmosphere',
+          'sky-atmosphere-sun': [0.0, 0.0],
+          'sky-atmosphere-sun-intensity': 15
+        }
+      });
+    }
+    
+    // Always apply weather effects if weather data is available
+    if (currentWeather && currentWeather.weather && currentWeather.weather[0]) {
+      const weatherCode = currentWeather.weather[0].id;
+      applyWeatherEffectsToMap(map, weatherCode);
+    }
+    
+    mapRef.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+  };
 
   // Cache user's liked messages
   useEffect(() => {
@@ -1313,6 +1144,42 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     }
   }, [lightPreset]);
 
+  // Initialize map with 3D settings
+  useEffect(() => {
+    // Always set up 3D features for the map
+    if (mapRef.current) {
+      try {
+        // Configure the map for 3D mode
+        mapRef.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+        mapRef.current.setConfigProperty('basemap', 'show3dObjects', true);
+        
+        // Set initial pitch for 3D perspective
+        mapRef.current.setPitch(45);
+        
+        // Only show 3D loading indicator once
+        if (!hasSetInitialPosition.current) {
+          hasSetInitialPosition.current = true;
+        }
+      } catch (err) {
+        console.error('Error configuring 3D mode:', err);
+      }
+    }
+  }, [mapRef]);
+
+  // Always use 3D mode - no need for state toggle anymore
+  // const [is3DMode, setIs3DMode] = useState(true);
+  
+  // Always use 3D settings
+  const mapConfig = {
+    show3dObjects: true,
+    lightPreset: lightPreset
+  };
+
+  // Add this toggle function if it doesn't exist
+  const toggleWeatherEffects = () => {
+    setWeatherEffectsEnabled(!weatherEffectsEnabled);
+  };
+
   return (
     <div className={`map-container globe-view light-preset-${lightPreset}`}>
       <ReactMapGL
@@ -1321,11 +1188,12 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         onMove={handleMapMove}
         mapStyle={isDarkMode ? "mapbox://styles/mapbox/standard" : "mapbox://styles/mapbox/standard"}
         mapboxAccessToken="pk.eyJ1IjoiZGFya25pZ2h0MDA3IiwiYSI6ImNqOXpiMWF3MjhuajEyeHFzcjhzdDVzN20ifQ.DlcipLyUIsK1pVHRtPK9Mw"
-        terrain={is3DMode ? { source: 'mapbox-dem', exaggeration: 1.5 } : undefined}
+        terrain={{ source: 'mapbox-dem', exaggeration: 1.5 }}
         projection="globe"
         initialViewState={{
           ...viewState,
-          renderWorldCopies: false // Disable world copies in globe mode
+          renderWorldCopies: false, // Disable world copies in globe mode
+          pitch: 45, // Always use 3D pitch
         }}
         mapOptions={{
           localIdeographFontFamily: "'Noto Sans', 'Noto Sans CJK SC', sans-serif",
@@ -1335,28 +1203,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           },
           fadeDuration: 1000 // Smoother transitions when changing light preset
         }}
-        onStyleLoad={(map) => {
-          console.log(`Map style loaded, immediately applying light preset: ${lightPreset}`);
-          map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-          
-          // Apply globe projection and effects
-          map.setProjection('globe');
-          
-          // Add atmosphere effect with improved settings for less bright skyline
-          map.setFog({
-            'color': 'rgb(156, 180, 205)', // softer light blue
-            'high-color': 'rgb(36, 92, 223)', // deep blue
-            'horizon-blend': 0.015, // reduced blend for sharper horizon
-            'space-color': 'rgb(11, 11, 25)', // dark space color
-            'star-intensity': 0.7, // slightly more visible stars
-            'range': [2.0, 14] // Raised fog layer significantly higher to clear skyline
-          });
-          
-          // Apply weather effects if we have weather data
-          if (currentWeather && currentWeather.weather && currentWeather.weather[0]) {
-            applyWeatherEffectsToMap(map, currentWeather.weather[0].id);
-          }
-        }}
+        onStyleLoad={handleMapStyleLoad}
       >
         {/* Loading indicator */}
         {isLoading && (
@@ -1366,6 +1213,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           </div>
         )}
         
+        {/* Only show weather widget when weather effects are enabled */}
         <MemoizedWeatherWidget 
           {...weatherWidgetProps}
           onWeatherUpdate={handleWeatherUpdate}
@@ -1468,6 +1316,15 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             </div>
           </Popup>
         )}
+
+        {/* Vessel tracking layer */}
+        {showVesselTracking && vesselTrackingInitialized && mapRef.current && (
+          <VesselLayer 
+            map={mapRef.current.getMap()} 
+            visible={showVesselTracking} 
+            refreshInterval={10000} // Refresh every 10 seconds
+          />
+        )}
       </ReactMapGL>
 
       {/* Time indicator in top right */}
@@ -1521,17 +1378,18 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
       </div>
 
       {/* Map controls */}
-      <div className={`map-controls ${isDarkMode ? 'dark-mode' : ''}`}>
+      <div className="map-controls">
         <button 
-          className={`map-control-button ${is3DMode ? 'active' : ''}`} 
+          className={`map-control-button ${is3DMode ? 'active' : ''}`}
           onClick={toggle3DMode}
-          title={is3DMode ? "Switch to 2D view" : "Switch to 3D view"}
+          title={is3DMode ? 'Disable 3D buildings' : 'Enable 3D buildings'}
         >
-          <GoStack />
-          <span className="control-label">{is3DMode ? "2D" : "3D"}</span>
+          <span className="control-icon">🏙️</span>
         </button>
+        
+        {/* Weather and vessel tracking buttons removed - these features are now always enabled */}
       </div>
-
+      
       {/* Group location button and compose button together */}
       <div className="map-action-buttons">
         {/* User location button */}

@@ -1,3 +1,29 @@
+/* 3D Map Styles - Now the default styles */
+
+/* 3D styling is now integrated into the main MapView component */
+.map-view-3d-container {
+  display: none; /* Hide this component as it's now deprecated */
+}
+
+/* Redirect notice */
+.map-3d-redirect-notice {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  z-index: 1000;
+}
+
+.dark-mode .map-3d-redirect-notice {
+  background-color: rgba(36, 37, 38, 0.9);
+  color: #e4e6eb;
+}
+
 /* 3D Mode Styles */
 
 /* Toggle button for 3D mode - exact match to weather widget in icon-only mode */

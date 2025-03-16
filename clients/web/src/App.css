@@ -506,3 +506,50 @@ body.dark-mode .floating-action-button:hover {
     transform: rotate(360deg);
   }
 }
+
+/* Component Loader Styles */
+.component-loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  width: 100%;
+}
+
+.spinner-small {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-left-color: var(--primary-color, #4a90e2);
+  animation: spin 1s linear infinite;
+}
+
+.dark-mode .spinner-small {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-left-color: var(--primary-color, #4a90e2);
+}
+
+/* Image optimization */
+img {
+  content-visibility: auto;
+}
+
+/* CSS Variables for theme colors */
+:root {
+  --primary-color: #4a90e2;
+  --bg-color: #ffffff;
+  --text-color: #333333;
+  --bg-color-dark: #121212;
+  --text-color-dark: #f0f0f0;
+}
+
+/* Add support for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

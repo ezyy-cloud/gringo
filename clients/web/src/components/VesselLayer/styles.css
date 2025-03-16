@@ -1,0 +1,468 @@
+.vessel-layer-loading,
+.vessel-layer-error,
+.vessel-layer-info {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 10;
+  max-width: 300px;
+}
+
+.vessel-layer-loading {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+}
+
+.vessel-layer-error {
+  background-color: rgba(220, 53, 69, 0.9);
+  color: white;
+}
+
+.vessel-layer-info {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+}
+
+/* Vessel popup styles */
+.vessel-popup {
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.vessel-popup-header {
+  font-weight: bold;
+  font-size: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 8px;
+}
+
+.vessel-popup-content {
+  font-size: 13px;
+}
+
+.vessel-popup-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.vessel-popup-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.vessel-popup-value {
+  text-align: right;
+  font-weight: normal;
+}
+
+/* Dark mode for popup */
+.vessel-popup.dark-mode {
+  color: #f0f0f0;
+  background-color: #222;
+}
+
+.vessel-popup.dark-mode .vessel-popup-header {
+  border-bottom-color: #444;
+}
+
+.vessel-popup.dark-mode .vessel-popup-label {
+  color: #aaa;
+}
+
+/* Custom popup class to override mapbox styles */
+.mapboxgl-popup.custom-popup .mapboxgl-popup-content {
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 12px;
+}
+
+.mapboxgl-popup.custom-popup.dark-mode .mapboxgl-popup-content {
+  background-color: rgba(34, 34, 34, 0.95);
+}
+
+/* Hover popup styles */
+.vessel-hover-popup {
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  text-align: center;
+}
+
+.vessel-hover-header {
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.vessel-hover-content {
+  font-size: 12px;
+  color: #666;
+}
+
+.vessel-hover-popup.dark-mode {
+  color: #f0f0f0;
+}
+
+.vessel-hover-popup.dark-mode .vessel-hover-content {
+  color: #aaa;
+}
+
+.mapboxgl-popup.hover-popup .mapboxgl-popup-content {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
+}
+
+.mapboxgl-popup.hover-popup.dark-mode .mapboxgl-popup-content {
+  background-color: rgba(34, 34, 34, 0.9);
+}
+
+.mapboxgl-popup.hover-popup .mapboxgl-popup-tip {
+  display: none;
+}
+
+/* Vessel Info Container */
+.vessel-info-container {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 10px 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  max-width: 300px;
+  z-index: 10;
+}
+
+.vessel-info-container.dark-mode {
+  background-color: rgba(34, 34, 34, 0.9);
+  color: #f0f0f0;
+}
+
+.vessel-count {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.vessel-status {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.vessel-status.error {
+  color: #e74c3c;
+}
+
+.vessel-info-container.dark-mode .vessel-status {
+  color: #aaa;
+}
+
+.vessel-info-container.dark-mode .vessel-status.error {
+  color: #ff6b6b;
+}
+
+.vessel-connection-status {
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+.vessel-connection-status.connected {
+  background-color: rgba(46, 204, 64, 0.2);
+  color: #2ecc40;
+}
+
+.vessel-connection-status.connecting,
+.vessel-connection-status.initializing {
+  background-color: rgba(255, 133, 27, 0.2);
+  color: #ff851b;
+}
+
+.vessel-connection-status.closing,
+.vessel-connection-status.closed {
+  background-color: rgba(170, 170, 170, 0.2);
+  color: #aaa;
+}
+
+.vessel-connection-status.error {
+  background-color: rgba(231, 76, 60, 0.2);
+  color: #e74c3c;
+}
+
+/* Dark mode status colors */
+.vessel-info-container.dark-mode .vessel-connection-status.connected {
+  background-color: rgba(46, 204, 64, 0.3);
+  color: #7aeb8a;
+}
+
+.vessel-info-container.dark-mode .vessel-connection-status.connecting,
+.vessel-info-container.dark-mode .vessel-connection-status.initializing {
+  background-color: rgba(255, 133, 27, 0.3);
+  color: #ffb273;
+}
+
+.vessel-info-container.dark-mode .vessel-connection-status.error {
+  background-color: rgba(231, 76, 60, 0.3);
+  color: #ff8b82;
+}
+
+.vessel-layer-status {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1000;
+  max-width: 300px;
+}
+
+.vessel-layer-loading {
+  margin-bottom: 5px;
+  padding: 3px 5px;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+}
+
+.vessel-layer-error {
+  margin-bottom: 5px;
+  padding: 3px 5px;
+  background-color: rgba(255, 0, 0, 0.3);
+  border-radius: 2px;
+}
+
+.vessel-layer-info {
+  display: flex;
+  align-items: center;
+}
+
+.vessel-layer-info-floating {
+  position: absolute;
+  top: 120px;
+  right: 10px;
+  background-color: rgba(0, 60, 136, 0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background-color: gray;
+}
+
+.connection-connected .status-indicator {
+  background-color: #2ECC40;
+}
+
+.connection-connecting .status-indicator {
+  background-color: #FF851B;
+}
+
+.connection-closing .status-indicator,
+.connection-closed .status-indicator {
+  background-color: #FF4136;
+}
+
+.connection-error .status-indicator {
+  background-color: #FF4136;
+}
+
+.connection-unknown .status-indicator {
+  background-color: #AAAAAA;
+}
+
+.no-vessels-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 1000;
+}
+
+.vessel-legend {
+  position: absolute;
+  top: 160px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1000;
+  width: 180px;
+}
+
+.vessel-legend h4 {
+  margin: 0 0 5px 0;
+  font-size: 13px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  padding-bottom: 5px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.legend-color {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  border-radius: 50%;
+}
+
+.vessel-controls {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  padding-top: 10px;
+  text-align: center;
+}
+
+.vessel-control-button {
+  background-color: rgba(0, 120, 215, 0.7);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.vessel-control-button:hover {
+  background-color: rgba(0, 120, 215, 0.9);
+}
+
+.vessel-control-button.active {
+  background-color: rgba(0, 183, 74, 0.7);
+}
+
+.vessel-control-button.active:hover {
+  background-color: rgba(0, 183, 74, 0.9);
+}
+
+/* Close button styling */
+.custom-popup .mapboxgl-popup-close-button {
+  color: white;
+  font-size: 16px;
+  padding: 0 6px;
+  right: 5px;
+  top: 5px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .custom-popup .mapboxgl-popup-close-button {
+    color: #f3f4f6;
+  }
+}
+
+/* Dark mode classes for manual toggle */
+.vessel-dark-mode .mapboxgl-popup.custom-popup .mapboxgl-popup-content,
+.custom-popup.dark-mode .mapboxgl-popup-content {
+  background-color: #1f2937;
+  color: #f3f4f6;
+  border: 1px solid #374151;
+}
+
+.vessel-dark-mode .vessel-popup,
+.vessel-popup.dark-mode {
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+.vessel-dark-mode .vessel-popup-header,
+.vessel-popup-header.dark-mode {
+  /* background-color: #3b82f6; */
+}
+
+.vessel-dark-mode .vessel-popup-content,
+.vessel-popup-content.dark-mode {
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+.vessel-dark-mode .vessel-popup-label,
+.vessel-popup-label.dark-mode {
+  color: #9ca3af;
+}
+
+.vessel-dark-mode .vessel-popup-value,
+.vessel-popup-value.dark-mode {
+  color: #f3f4f6;
+}
+
+.vessel-dark-mode .vessel-popup-footer,
+.vessel-popup-footer.dark-mode {
+  background-color: #111827;
+  color: #9ca3af;
+}
+
+.vessel-dark-mode .mapboxgl-popup-close-button,
+.custom-popup.dark-mode .mapboxgl-popup-close-button {
+  color: #f3f4f6;
+}
+
+/* Dark mode styling for the legend */
+.vessel-dark-mode .vessel-legend,
+.vessel-legend.dark-mode {
+  background-color: rgba(31, 41, 55, 0.9);
+  color: #f3f4f6;
+  border: 1px solid rgba(75, 85, 99, 0.4);
+}
+
+.vessel-dark-mode .vessel-legend h4,
+.vessel-legend.dark-mode h4 {
+  border-bottom-color: rgba(107, 114, 128, 0.3);
+}
+
+/* Ensure hover popup in dark mode matches dark theme */
+.vessel-dark-mode .mapboxgl-popup.hover-popup .mapboxgl-popup-content,
+.hover-popup.dark-mode .mapboxgl-popup-content {
+  background-color: rgba(31, 41, 55, 0.95);
+  border: 1px solid rgba(107, 114, 128, 0.4);
+}
+
+.vessel-dark-mode .vessel-hover-popup,
+.vessel-hover-popup.dark-mode {
+  color: #f3f4f6;
+}
+
+.vessel-dark-mode .vessel-hover-header,
+.vessel-hover-header.dark-mode {
+  border-bottom-color: rgba(107, 114, 128, 0.4);
+}
+
+.vessel-dark-mode .vessel-hover-content,
+.vessel-hover-content.dark-mode {
+  color: rgba(243, 244, 246, 0.8);
+} 

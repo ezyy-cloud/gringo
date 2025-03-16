@@ -1,0 +1,122 @@
+.vessel-tracking-init {
+  background-color: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 500px;
+  margin: 40px auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.vessel-tracking-init h3 {
+  margin-top: 0;
+  color: #4ECDC4;
+  font-size: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
+
+.vessel-tracking-init p {
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
+.vessel-tracking-error {
+  background-color: rgba(255, 65, 54, 0.2);
+  color: #FF4136;
+  padding: 12px;
+  border-left: 4px solid #FF4136;
+  margin-bottom: 20px;
+  border-radius: 0 4px 4px 0;
+}
+
+.vessel-tracking-success {
+  background-color: rgba(0, 40, 20, 0.9);
+  border-left: 4px solid #2ECC40;
+}
+
+.vessel-tracking-success h3 {
+  color: #2ECC40;
+}
+
+.vessel-tracking-success ul {
+  padding-left: 20px;
+  margin-bottom: 15px;
+}
+
+.vessel-tracking-success li {
+  margin-bottom: 5px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #ddd;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  font-size: 1rem;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #4ECDC4;
+  box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.3);
+}
+
+.form-help {
+  display: block;
+  margin-top: 5px;
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.vessel-tracking-button {
+  background-color: #4ECDC4;
+  color: #111;
+  border: none;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.vessel-tracking-button:hover {
+  background-color: #3DBDB4;
+}
+
+.vessel-tracking-button:disabled {
+  background-color: #666;
+  cursor: not-allowed;
+}
+
+.vessel-tracking-info {
+  margin-top: 25px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.9rem;
+  color: #bbb;
+}
+
+.vessel-tracking-info a {
+  color: #4ECDC4;
+  text-decoration: none;
+}
+
+.vessel-tracking-info a:hover {
+  text-decoration: underline;
+} 

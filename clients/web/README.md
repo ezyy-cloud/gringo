@@ -18,7 +18,7 @@ This application uses Mapbox GL JS v3, which provides enhanced mapping capabilit
 
 The map interface provides several controls:
 
-- **3D Toggle**: Switch between 2D and 3D viewing modes
+- **Always 3D**: The application now exclusively uses 3D mode for an immersive experience
 - **Heatmap Toggle**: Show/hide the message density heatmap
 - **User Location**: Center the map on your current location
 - **Reset View**: Return to the default map view

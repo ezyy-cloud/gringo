@@ -1,13 +1,10 @@
-import { useState, useEffect, useContext, useRef, useCallback } from 'react'
+import { useState, useEffect, useContext, useRef, useCallback, lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import socketService from './services/socketService'
 import apiService from './services/apiService'
 import authService from './services/authService'
-import AppContent from './components/AppContent'
-import Auth from './components/auth/Auth'
+// Replace direct imports with lazy loaded components
 import OfflineFallback from './components/OfflineFallback'
-import PWAInstallPrompt from './components/PWAInstallPrompt'
-import LandingPage from './components/LandingPage'
 import { AppContext } from './context/AppContext'
 import { 
   createFallbackLocation, 
@@ -17,6 +14,19 @@ import {
 } from './utils/locationUtils'
 import { createNotification } from './utils/notificationUtils'
 import './App.css'
+
+// Lazy load components
+const AppContent = lazy(() => import('./components/AppContent'));
+const Auth = lazy(() => import('./components/auth/Auth'));
+const PWAInstallPrompt = lazy(() => import('./components/PWAInstallPrompt'));
+const LandingPage = lazy(() => import('./components/LandingPage'));
+
+// Component loading fallback
+const ComponentLoader = () => (
+  <div className="component-loader">
+    <div className="spinner-small"></div>
+  </div>
+);
 
 function App() {
   const [user, setUser] = useState(null)
@@ -628,6 +638,9 @@ function App() {
 
   // Check for authentication on initial load
   useEffect(() => {
+    // Log that the application now runs exclusively in 3D mode
+    console.log('🌎 GringoX web client initialized - now running exclusively in 3D mode');
+    
     // Check if user is logged in
     const checkAuth = async () => {
       console.log('🔍 checkAuth: Starting authentication check');
@@ -1190,36 +1203,59 @@ function App() {
   // Main app content
   console.log('🔎 Rendering main AppContent because user exists:', user?.username);
   return (
-    <Router>
-      <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
-        {user ? (
-          <AppContent 
-            user={user}
-            onlineUsers={onlineUsers}
-            messages={messages}
-            handleSocketMessage={handleSocketMessage}
-            isConnected={isConnected}
-            connectionError={connectionError}
-            handleLogout={handleLogout}
-            userLocation={userLocation}
-            isDarkMode={isDarkMode}
-            toggleDarkMode={toggleDarkMode}
-            notifications={notifications}
-            onClearNotifications={handleClearNotifications}
-            isLoading={isLoading}
-            canUserSendMessage={canUserSendMessage}
-            getTimeRemainingBeforeNextMessage={getTimeRemainingBeforeNextMessage}
-            handleRefreshMap={handleRefreshMap}
-          />
-        ) : (
-          <Auth 
-            onAuthSuccess={handleAuthSuccess} 
-            isDarkMode={isDarkMode}
-            toggleDarkMode={toggleDarkMode}
-          />
-        )}
-      </div>
-    </Router>
+    <>
+      <Router>
+        {isOffline && <OfflineFallback />}
+        <PWAInstallPrompt />
+        
+        <div className={`app-container ${isDarkMode ? 'dark-mode' : ''}`}>
+          {user ? (
+            <Suspense fallback={<ComponentLoader />}>
+              <Routes>
+                <Route 
+                  path="/" 
+                  element={
+                    <AppContent 
+                      user={user}
+                      onlineUsers={onlineUsers}
+                      messages={messages}
+                      handleSocketMessage={handleSocketMessage}
+                      isConnected={isConnected}
+                      connectionError={connectionError}
+                      handleLogout={handleLogout}
+                      userLocation={userLocation}
+                      isDarkMode={isDarkMode}
+                      toggleDarkMode={toggleDarkMode}
+                      notifications={notifications}
+                      onClearNotifications={handleClearNotifications}
+                      isLoading={isLoading}
+                      canUserSendMessage={canUserSendMessage}
+                      getTimeRemainingBeforeNextMessage={getTimeRemainingBeforeNextMessage}
+                      handleRefreshMap={handleRefreshMap}
+                    />
+                  } 
+                />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          ) : (
+            <Suspense fallback={<ComponentLoader />}>
+              <Routes>
+                <Route path="/login" element={
+                  <Auth 
+                    onAuthSuccess={handleAuthSuccess} 
+                    isDarkMode={isDarkMode}
+                    toggleDarkMode={toggleDarkMode}
+                  />
+                } />
+                <Route path="/" element={<LandingPage isDarkMode={isDarkMode} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          )}
+        </div>
+      </Router>
+    </>
   );
 }
 

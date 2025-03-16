@@ -24,6 +24,7 @@ const messageRoutes = require('./routes/messageRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const systemRoutes = require('./routes/systemRoutes');
 const botRoutes = require('./routes/botRoutes');
+const vesselsRoutes = require('./routes/vesselsRoutes');
 
 // Import middleware
 const { protect } = require('./middleware/authMiddleware');
@@ -658,6 +659,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/bots', botRoutes);
+app.use('/api/vessels', vesselsRoutes);
 
 // Special route handlers that need Socket.IO
 const messageHandlers = socketMiddleware.getMessageHandlers();
