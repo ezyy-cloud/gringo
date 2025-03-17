@@ -13,6 +13,7 @@
 /clients/*/build
 /server/build
 /clients/docs/build
+/clients/web/dist
 
 # Misc
 .DS_Store

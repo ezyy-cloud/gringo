@@ -136,7 +136,8 @@ export default defineConfig(({ mode }) => {
             'deck.gl': ['@deck.gl/core', '@deck.gl/geo-layers', '@deck.gl/layers', '@deck.gl/mapbox'],
             'threejs': ['three', '@react-three/fiber', '@react-three/drei']
           }
-        }
+        },
+        external: ['@deck.gl/mesh-layers', '@deck.gl/extensions']
       },
       // Generate sourcemaps in development only
       sourcemap: !isProd,

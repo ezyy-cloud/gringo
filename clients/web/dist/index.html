@@ -8,14 +8,46 @@
     <meta name="theme-color" content="#ffffff" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" sizes="192x192">
     <link rel="mask-icon" href="/chat-icon.svg" color="#ffffff">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Preload critical fonts -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="data:text/jsx;base64,aW1wb3J0IHsgU3RyaWN0TW9kZSwgU3VzcGVuc2UgfSBmcm9tICdyZWFjdCcKaW1wb3J0IHsgY3JlYXRlUm9vdCB9IGZyb20gJ3JlYWN0LWRvbS9jbGllbnQnCmltcG9ydCAnLi9pbmRleC5jc3MnCmltcG9ydCBBcHAgZnJvbSAnLi9BcHAuanN4JwppbXBvcnQgeyBBcHBDb250ZXh0UHJvdmlkZXIgfSBmcm9tICcuL2NvbnRleHQvQXBwQ29udGV4dCcKaW1wb3J0IHsgcmVnaXN0ZXJTVyB9IGZyb20gJ3ZpcnR1YWw6cHdhLXJlZ2lzdGVyJwoKLy8gTG9hZGluZyBmYWxsYmFjayBjb21wb25lbnQKY29uc3QgTG9hZGluZ0ZhbGxiYWNrID0gKCkgPT4gKAogIDxkaXYgY2xhc3NOYW1lPSJsb2FkaW5nLWZhbGxiYWNrIj4KICAgIDxkaXYgY2xhc3NOYW1lPSJzcGlubmVyIj48L2Rpdj4KICAgIDxwPkxvYWRpbmcgYXBwbGljYXRpb24uLi48L3A+CiAgPC9kaXY+Cik7CgovLyBSZWdpc3RlciBzZXJ2aWNlIHdvcmtlciBmb3IgUFdBIGNhcGFiaWxpdGllcwpjb25zdCB1cGRhdGVTVyA9IHJlZ2lzdGVyU1coewogIG9uTmVlZFJlZnJlc2goKSB7CiAgICBpZiAoY29uZmlybSgnTmV3IGNvbnRlbnQgYXZhaWxhYmxlLiBSZWxvYWQ/JykpIHsKICAgICAgdXBkYXRlU1codHJ1ZSkKICAgIH0KICB9LAogIG9uT2ZmbGluZVJlYWR5KCkgewogICAgY29uc29sZS5sb2coJ0FwcCByZWFkeSB0byB3b3JrIG9mZmxpbmUnKQogIH0sCn0pCgpjcmVhdGVSb290KGRvY3VtZW50LmdldEVsZW1lbnRCeUlkKCdyb290JykpLnJlbmRlcigKICA8U3RyaWN0TW9kZT4KICAgIDxBcHBDb250ZXh0UHJvdmlkZXI+CiAgICAgIDxTdXNwZW5zZSBmYWxsYmFjaz17PExvYWRpbmdGYWxsYmFjayAvPn0+CiAgICAgICAgPEFwcCAvPgogICAgICA8L1N1c3BlbnNlPgogICAgPC9BcHBDb250ZXh0UHJvdmlkZXI+CiAgPC9TdHJpY3RNb2RlPiwKKQo=" as="script" type="module">
+    
+    <!-- Meta tags for better SEO and social sharing -->
+    <meta property="og:title" content="Gringo">
+    <meta property="og:description" content="Socket.IO and Express API Chat Application">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    
     <title>Gringo</title>
-    <script type="module" crossorigin src="/assets/index-DAe63pVr.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DfKjjLt3.css">
+    <script type="module" crossorigin src="/assets/index-fj1fAtFr.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-1nKBBTJF.js">
+    <link rel="modulepreload" crossorigin href="/assets/threejs-3YrjiVoD.js">
+    <link rel="modulepreload" crossorigin href="/assets/mapbox-CH0RJjgq.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Cyu5AQyE.css">
   <link rel="manifest" href="/manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
+    
+    <!-- Add inline script for early theme detection to prevent flashing -->
+    <script>
+      // Early dark mode detection to prevent flash of wrong theme
+      (function() {
+        const darkModePreference = localStorage.getItem('darkMode');
+        if (
+          darkModePreference === 'true' || 
+          (!darkModePreference && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ) {
+          document.body.classList.add('dark-mode');
+        }
+      })();
+    </script>
   </body>
 </html>
