@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import React from 'react';
-import ReactMapGL, { Marker, Popup, Source, Layer } from 'react-map-gl';
+import ReactMapGL, { Marker, Popup } from 'react-map-gl';
 import { useNavigate } from 'react-router-dom';
-import { GoHeart, GoHeartFill, GoLocation, GoHome, GoStack } from "react-icons/go";
+import { GoHeart, GoHeartFill, GoLocation, GoHome } from "react-icons/go";
 import AvatarPlaceholder from '../AvatarPlaceholder';
 import WeatherWidget from '../WeatherWidget';
 import FloatingActionButton from '../FloatingActionButton';
-import { timeAgo, formatTime } from '../../utils/dateUtils';
+import { timeAgo } from '../../utils/dateUtils';
 import { renderTextWithLinks } from '../../utils/textUtils.jsx';
 import apiService from '../../services/apiService';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -15,7 +15,6 @@ import './styles.css';
 import '../MapView3D/styles.css';
 import { getSolarTimes, getLightingPreset } from '../../utils/solarUtils';
 import VesselLayer from '../VesselLayer';
-import VesselTrackingInit from '../VesselTrackingInit';
 import vesselService from '../../services/vesselService';
 
 // Weather effect settings for different weather conditions
@@ -60,7 +59,7 @@ const WEATHER_EFFECTS = {
       range: [1.0, 8] // Raised atmosphere
     }
   },
-  
+
   // Rain intensities (300-599)
   rainLight: {
     rain: {
@@ -101,7 +100,7 @@ const WEATHER_EFFECTS = {
       range: [1.2, 9] // Raised atmosphere
     }
   },
-  
+
   // Snow intensities (600-699)
   snowLight: {
     snow: {
@@ -142,7 +141,7 @@ const WEATHER_EFFECTS = {
       range: [1.2, 8] // Raised atmosphere
     }
   },
-  
+
   // Atmosphere conditions (700-799)
   fogLight: {
     fog: {
@@ -168,7 +167,7 @@ const WEATHER_EFFECTS = {
       range: [0.5, 4] // Raised atmosphere (less for fog conditions)
     }
   },
-  
+
   // Clear (800)
   clear: {
     fog: {
@@ -178,7 +177,7 @@ const WEATHER_EFFECTS = {
       range: [2.0, 14] // Raised atmosphere significantly for clear skies
     }
   },
-  
+
   // Clouds intensities (801-899)
   cloudsLight: {
     fog: {
@@ -212,12 +211,11 @@ const MemoizedWeatherWidget = React.memo(WeatherWidget);
 // Helper function to apply weather effects to the map based on weather conditions
 const applyWeatherEffectsToMap = (map, weatherCode) => {
   if (!map || !map.setFog || !map.setSnow || !map.setRain) {
-    console.warn('Map or weather effect methods unavailable');
     return;
   }
-  
+
   let effects = null;
-  
+
   // Match specific weather code to intensity-appropriate effects
   if (weatherCode >= 200 && weatherCode < 300) {
     // Thunderstorm intensity
@@ -269,9 +267,7 @@ const applyWeatherEffectsToMap = (map, weatherCode) => {
   } else {
     effects = WEATHER_EFFECTS.clear;               // Default to clear if unknown
   }
-  
-  console.log(`Applying weather effects for weather code ${weatherCode}`);
-  
+
   // Apply the appropriate effects
   if (effects.snow) {
     map.setSnow(effects.snow);
@@ -286,7 +282,7 @@ const applyWeatherEffectsToMap = (map, weatherCode) => {
     map.setRain(null);
     map.setSnow(null);
   }
-  
+
   // Always set fog for atmosphere effects
   if (effects.fog) {
     map.setFog(effects.fog);
@@ -296,7 +292,7 @@ const applyWeatherEffectsToMap = (map, weatherCode) => {
 // Helper function to determine the appropriate light preset based on time of day
 const getLightPresetForTime = (date, latitude, longitude) => {
   if (!date) return 'day'; // Default to day if no date
-  
+
   try {
     // Get local time at the viewed location by calculating timezone offset
     // This is a more accurate approach using the browser's Intl API
@@ -307,30 +303,26 @@ const getLightPresetForTime = (date, latitude, longitude) => {
       minute: 'numeric',
       hour12: false
     });
-    
+
     // Get the time parts in the proper timezone
     const localTimeStr = formatter.format(date);
     const [hours, minutes] = localTimeStr.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes;
-    
-    console.log(`Local time at ${latitude.toFixed(2)}, ${longitude.toFixed(2)}: ${localTimeStr}`);
-    
+
     // Get solar times using the optimized utility
-    const {sunrise, sunset, dawn, dusk} = getSolarTimes(date, latitude, longitude);
-    
+    const { sunrise, sunset, dawn, dusk } = getSolarTimes(date, latitude, longitude);
+
     // Convert solar times to minute-of-day for easier comparison
     const sunriseMinutes = sunrise.getHours() * 60 + sunrise.getMinutes();
     const sunsetMinutes = sunset.getHours() * 60 + sunset.getMinutes();
     const dawnMinutes = dawn.getHours() * 60 + dawn.getMinutes();
     const duskMinutes = dusk.getHours() * 60 + dusk.getMinutes();
-    
-    console.log(`Solar times: dawn=${formatTime(dawn)}, sunrise=${formatTime(sunrise)}, sunset=${formatTime(sunset)}, dusk=${formatTime(dusk)}`);
-    
+
     // Check for special case: sunset before sunrise (spanning midnight)
     if (sunsetMinutes < sunriseMinutes) {
       // This can happen in some edge cases or due to calculation errors
       // In this case, check if we're between sunset and midnight OR between midnight and sunrise
-      if (totalMinutes >= sunsetMinutes && totalMinutes <= 24*60) {
+      if (totalMinutes >= sunsetMinutes && totalMinutes <= 24 * 60) {
         return 'night';
       } else if (totalMinutes >= 0 && totalMinutes <= sunriseMinutes) {
         return 'night';
@@ -354,9 +346,8 @@ const getLightPresetForTime = (date, latitude, longitude) => {
         return 'night';
       }
     }
-  } catch (error) {
-    console.error('Error calculating light preset:', error);
-    
+  } catch {
+
     // Fall back to using the direct utility function
     return getLightingPreset(date, latitude, longitude);
   }
@@ -368,45 +359,41 @@ const getTimezoneFromCoordinates = (latitude, longitude) => {
     // Calculate an approximate timezone based on longitude
     // Each 15° of longitude represents roughly 1 hour time difference
     const timezoneOffset = Math.round(longitude / 15);
-    
+
     // The Etc/GMT format is counterintuitive:
     // Etc/GMT+8 means 8 hours BEHIND UTC (like Pacific Standard Time)
     // Etc/GMT-8 means 8 hours AHEAD of UTC (like China Standard Time)
     // Also, we can't use leading zeros in the format (Etc/GMT+08 is invalid)
-    
+
     // Clamp the offset to valid range (-14 to +12)
     const clampedOffset = Math.max(-14, Math.min(12, timezoneOffset));
-    
+
     // Invert the sign for Etc/GMT format and remove leading zeros
     const sign = clampedOffset <= 0 ? '+' : '-';
     const hours = Math.abs(clampedOffset);
-    
+
     // Etc/GMT+0 or Etc/GMT-0 are both invalid, use "UTC" instead
     if (hours === 0) {
       return "UTC";
     }
-    
+
     const timezone = `Etc/GMT${sign}${hours}`;
-    
+
     // Validate the timezone
     try {
       // This will throw if the timezone is invalid
       Intl.DateTimeFormat('en-US', { timeZone: timezone });
       return timezone;
-    } catch (formatError) {
-      console.warn(`Invalid timezone format: ${timezone}, falling back to UTC`);
+    } catch {
       return 'UTC';
     }
-  } catch (error) {
-    console.warn('Error calculating timezone from coordinates, using UTC:', error);
+  } catch {
     return 'UTC'; // Default to UTC if we can't determine timezone
   }
 };
 
 const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkMode, isLoading, onRefreshMap, onOpenModal }) => {
-  // Debug log for received messages
-  console.log(`🗺️ MapView: Received ${messages?.length || 0} messages`);
-  console.log('🗺️ MapView: Current userLocation:', userLocation);
+
 
   const [viewState, setViewState] = useState({
     longitude: 0,  // Center on prime meridian initially
@@ -419,9 +406,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [likedMessagesCache, setLikedMessagesCache] = useState(null);
-  const [is3DMode, setIs3DMode] = useState(true);
-  const [is3DLoaded, setIs3DLoaded] = useState(false);
-  const [showHint, setShowHint] = useState(false);
+  const is3DMode = true; // Always use 3D mode
   const [lightPreset, setLightPreset] = useState('day'); // Default light preset, will be updated automatically
   const mapRef = useRef();
   const navigate = useNavigate();
@@ -441,23 +426,19 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   const [currentWeather, setCurrentWeather] = useState(null);
 
   // State for vessel tracking
-  const [showVesselTracking, setShowVesselTracking] = useState(true);
+  const [showVesselTracking] = useState(true);
   const [vesselTrackingInitialized, setVesselTrackingInitialized] = useState(false);
-  const [weatherEffectsEnabled, setWeatherEffectsEnabled] = useState(true);
 
   // Automatically initialize vessel tracking when component mounts
   useEffect(() => {
     // Auto-initialize vessel tracking when the component mounts
     const initializeVesselTracking = async () => {
-      try {
-        const response = await vesselService.initializeTracking();
-        if (response.success) {
-          setVesselTrackingInitialized(true);
-          console.log('Vessel tracking initialized automatically');
-        }
-      } catch (error) {
-        console.error('Error auto-initializing vessel tracking:', error);
+
+      const response = await vesselService.initializeTracking();
+      if (response.success) {
+        setVesselTrackingInitialized(true);
       }
+
     };
 
     initializeVesselTracking();
@@ -470,16 +451,14 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
       latitude: viewState.latitude,
       longitude: viewState.longitude
     };
-    
+
     // Calculate light preset immediately on mount
     const now = new Date();
     const initialPreset = getLightPresetForTime(now, location.latitude, location.longitude);
-    
-    console.log(`🌓 Initial light preset on mount: ${initialPreset} for location ${location.latitude.toFixed(2)}, ${location.longitude.toFixed(2)}`);
-    
+
     // Set the preset state which will be used by the map when it renders
     setLightPreset(initialPreset);
-    
+
     // Schedule periodic updates (every 5 minutes) to account for time passing
     const intervalId = setInterval(() => {
       const currentTime = new Date();
@@ -487,15 +466,14 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         latitude: viewState.latitude,
         longitude: viewState.longitude
       } : location;
-      
+
       const updatedPreset = getLightPresetForTime(currentTime, currentLocation.latitude, currentLocation.longitude);
-      
+
       if (updatedPreset !== lightPreset) {
-        console.log(`🌓 Updating light preset to ${updatedPreset} based on time change`);
         setLightPreset(updatedPreset);
       }
     }, 5 * 60 * 1000); // Every 5 minutes
-    
+
     return () => clearInterval(intervalId);
   }, []); // Empty dependency array ensures this runs only once on mount
 
@@ -503,23 +481,20 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   useEffect(() => {
     // Only fetch messages on first mount, not on re-renders
     const hasFetchedKey = 'mapview_has_fetched_messages';
-    
+
     // Check if we've already fetched messages in this session
     const hasFetched = sessionStorage.getItem(hasFetchedKey);
-    
+
     if (!hasFetched) {
-      console.log('🗺️ MapView: First mount, calling refresh function');
       // Call the provided refresh function instead of dispatching an event
       if (onRefreshMap) {
         onRefreshMap();
       }
-      
+
       // Mark that we've fetched messages in this session
       sessionStorage.setItem(hasFetchedKey, 'true');
-    } else {
-      console.log('🗺️ MapView: Already fetched messages in this session, skipping');
     }
-    
+
     // Clear the fetch flag when the component is unmounted
     return () => {
       // Only clear if we're actually navigating away, not just re-rendering
@@ -532,16 +507,14 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Monitor messages count changes and log when they change
   useEffect(() => {
     const messagesCount = messages?.length || 0;
-    
+
     if (prevMessagesCountRef.current !== messagesCount) {
-      console.log(`MapView: Message count changed from ${prevMessagesCountRef.current} to ${messagesCount}`);
       prevMessagesCountRef.current = messagesCount;
     }
   }, [messages]);
 
   // We'll add a function to safely request refresh without causing page reloads
   const safeRefreshMap = useCallback(() => {
-    console.log('🗺️ MapView: Safe refresh requested');
     if (onRefreshMap) {
       // Use the provided function from props rather than triggering global events
       onRefreshMap();
@@ -549,18 +522,11 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   }, [onRefreshMap]);
 
   // Handle the manual refresh button click
-  const handleRefreshButtonClick = useCallback((e) => {
-    // Prevent default behavior that might cause page reloads
-    e.preventDefault();
-    console.log('🗺️ MapView: Manual refresh requested via button');
-    safeRefreshMap();
-  }, [safeRefreshMap]);
 
   // Set up automatic refresh on visibility change (when tab becomes active)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        console.log('🗺️ MapView: Document became visible, triggering refresh');
         // Wait a moment before refreshing to ensure the browser is ready
         setTimeout(() => {
           safeRefreshMap();
@@ -569,7 +535,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -582,37 +548,14 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     setSelectedMessage(null); // Close popup after navigation
   };
 
-  // Toggle 3D mode
-  const toggle3DMode = () => {
-    setIs3DMode(!is3DMode);
-  };
-  
   // Handle vessel tracking initialization
-  const handleVesselTrackingInitialized = (success) => {
-    if (success) {
-      setVesselTrackingInitialized(true);
-    }
-  };
 
   // Handle reset view button click
-  const handleResetView = useCallback(() => {
-    // Reset to default view (global view)
-    setViewState({
-      longitude: 0,  // Center on prime meridian
-      latitude: 20,  // Slight northward tilt for a more natural view
-      zoom: 1.2,     // Zoomed out to see most of the globe
-      pitch: 20,     // Slight pitch for 3D effect
-      bearing: 0
-    });
-    
-    console.log('View reset to default global view');
-  }, []);
 
   // Handle map style load
   const handleMapStyleLoad = (map) => {
-    console.log(`Map style loaded, immediately applying light preset: ${lightPreset}`);
     map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-    
+
     // Add terrain source
     if (!map.getSource('mapbox-dem')) {
       map.addSource('mapbox-dem', {
@@ -622,7 +565,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         'maxzoom': 14
       });
     }
-    
+
     // Add sky layer
     if (!map.getLayer('sky')) {
       map.addLayer({
@@ -635,13 +578,13 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         }
       });
     }
-    
+
     // Always apply weather effects if weather data is available
     if (currentWeather && currentWeather.weather && currentWeather.weather[0]) {
       const weatherCode = currentWeather.weather[0].id;
       applyWeatherEffectsToMap(map, weatherCode);
     }
-    
+
     mapRef.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
   };
 
@@ -658,7 +601,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             }
           }
         })
-        .catch(error => {
+        .catch(() => {
           setLikedMessagesCache([]);
         });
     }
@@ -666,13 +609,12 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
   // Track changes to likedMessagesCache
   useEffect(() => {
-    // Debug statements removed
   }, [likedMessagesCache, currentUsername]);
 
   // Check if a message is liked using cache when possible
   const isMessageLiked = useCallback((messageId) => {
     if (!messageId || !likedMessagesCache) return false;
-    
+
     // Convert both to strings to ensure consistent comparison
     const messageIdStr = messageId.toString();
     return likedMessagesCache.some(id => id.toString() === messageIdStr);
@@ -681,7 +623,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Handle marking a message when selected
   const onSelectMessage = (e, message) => {
     e.originalEvent.stopPropagation();
-    
+
     // If we have the cache, use it instead of making an API call
     if (likedMessagesCache && message.dbId) {
       const isLiked = isMessageLiked(message.dbId);
@@ -689,53 +631,52 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         ...message,
         likedByCurrentUser: isLiked
       };
-      
+
       setSelectedMessage(updatedMessage);
       setIsLiked(isLiked);
       setLikesCount(message.likesCount || 0);
-      
+
       if (likedMessagesCache && likedMessagesCache.length > 0) {
         // Check if message exists in liked messages
       }
-    } 
+    }
     // If message already has the like status, use it
-    else if (message.hasOwnProperty('likedByCurrentUser')) {
+    else if ('likedByCurrentUser' in message) {
       setSelectedMessage(message);
       setIsLiked(message.likedByCurrentUser);
       setLikesCount(message.likesCount || 0);
-      
+
       // Log the selected message's like status
-    } 
+    }
     // Otherwise fetch from API
     else if (currentUsername && message.dbId) {
-      
+
       apiService.getUserByUsername(currentUsername)
         .then(response => {
           // Log the raw response for debugging
-          
+
           // Fixed: Access the correct response structure (response.data.user)
           if (response.success && response.data && response.data.user && response.data.user.likedMessages) {
             const messageIdStr = message.dbId.toString();
             const isLiked = response.data.user.likedMessages.some(id => id.toString() === messageIdStr);
-            
+
             setSelectedMessage({
               ...message,
               likedByCurrentUser: isLiked
             });
             setIsLiked(isLiked);
             setLikesCount(message.likesCount || 0);
-            
+
             // Log the selected message's like status after API check with IDs
           } else {
             setSelectedMessage(message);
             setIsLiked(false);
             setLikesCount(message.likesCount || 0);
-            
+
             // Log the selected message's like status (default to false if API doesn't return expected data)
           }
         })
-        .catch(error => {
-          console.error('Error checking if message is liked:', error);
+        .catch(() => {
           // Set default values in case of error
           setSelectedMessage(message);
           setIsLiked(false);
@@ -753,53 +694,48 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     e.stopPropagation();
     if (!selectedMessage || !selectedMessage.dbId || !currentUsername) return;
 
-    try {
-      
-      const response = await apiService.likeMessage(selectedMessage.dbId);
-      if (response.success) {
-        setIsLiked(response.liked);
-        setLikesCount(response.likesCount);
-        
-        // Update the selected message with new like count
-        setSelectedMessage(prev => ({
-          ...prev,
-          likesCount: response.likesCount,
-          likedByCurrentUser: response.liked
-        }));
-        
-        // Update cache
-        if (response.liked) {
-          // Add to cache if not already there
-          const messageIdStr = selectedMessage.dbId.toString();
-          setLikedMessagesCache(prev => {
-            if (!prev) return [selectedMessage.dbId];
-            
-            // Check if it's already in the cache using string comparison
-            const exists = prev.some(id => id.toString() === messageIdStr);
-            return exists ? prev : [...prev, selectedMessage.dbId];
-          });
-        } else {
-          // Remove from cache
-          const messageIdStr = selectedMessage.dbId.toString();
-          setLikedMessagesCache(prev => {
-            if (!prev) return [];
-            return prev.filter(id => id.toString() !== messageIdStr);
-          });
-        }
-        
-        
-        // Update cache immediately to avoid delay in UI updates
+    const response = await apiService.likeMessage(selectedMessage.dbId);
+    if (response.success) {
+      setIsLiked(response.liked);
+      setLikesCount(response.likesCount);
+
+      // Update the selected message with new like count
+      setSelectedMessage(prev => ({
+        ...prev,
+        likesCount: response.likesCount,
+        likedByCurrentUser: response.liked
+      }));
+
+      // Update cache
+      if (response.liked) {
+        // Add to cache if not already there
+        const messageIdStr = selectedMessage.dbId.toString();
+        setLikedMessagesCache(prev => {
+          if (!prev) return [selectedMessage.dbId];
+
+          // Check if it's already in the cache using string comparison
+          const exists = prev.some(id => id.toString() === messageIdStr);
+          return exists ? prev : [...prev, selectedMessage.dbId];
+        });
+      } else {
+        // Remove from cache
+        const messageIdStr = selectedMessage.dbId.toString();
+        setLikedMessagesCache(prev => {
+          if (!prev) return [];
+          return prev.filter(id => id.toString() !== messageIdStr);
+        });
       }
-    } catch (error) {
-      console.error('Error toggling like:', error);
+
+
+      // Update cache immediately to avoid delay in UI updates
     }
+
   };
 
   // Filter messages that have valid location data with useMemo
   const messagesWithLocation = useMemo(() => {
-    console.log('🗺️ MapView: Filtering messages with location data');
-    return messages.filter(msg => 
-      msg.location && !msg.location.error && 
+    return messages.filter(msg =>
+      msg.location && !msg.location.error &&
       msg.location.latitude && msg.location.longitude
     );
   }, [messages]);
@@ -820,7 +756,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         hasSetInitialPosition.current = true;
         return;
       }
-      
+
       // Second priority: Use location from messagesWithLocation
       if (messagesWithLocation.length > 0) {
         // Use the location of the most recent message
@@ -840,11 +776,9 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Track message refreshes for debugging and handle selected message updates
   useEffect(() => {
     const messagesCount = messages.length;
-    
+
     // Only log when count changes
     if (messagesCount !== prevMessagesCountRef.current) {
-      console.log(`MapView: Message count changed from ${prevMessagesCountRef.current} to ${messagesCount}`);
-      
       // When messages are refreshed, update selected message data if needed
       if (selectedMessage) {
         const refreshedMessage = messages.find(msg => msg.dbId === selectedMessage.dbId);
@@ -854,27 +788,20 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
           setLikesCount(refreshedMessage.likesCount || 0);
         }
       }
-      
+
       prevMessagesCountRef.current = messagesCount;
     }
   }, [messages, selectedMessage]);
-  
+
   // Log the like status for all messages on the map
   useEffect(() => {
     if (messagesWithLocation.length > 0 && currentUsername) {
-      messagesWithLocation.forEach(message => {
-        const messageId = message.dbId || message._id;
-        
+      messagesWithLocation.forEach(() => {
+
         // Check if liked using either the message property or the cache
-        const isLiked = message.likedByCurrentUser || 
-          (likedMessagesCache && likedMessagesCache.some(id => {
-            // Convert both to strings to ensure consistent comparison
-            return messageId && id.toString() === messageId.toString();
-          }));
-        
+
         // Get the text content (might be in either content or text property)
-        const messageText = message.content || message.text || '';
-        
+
       });
     }
   }, [messagesWithLocation, likedMessagesCache, currentUsername]);
@@ -882,45 +809,35 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Add detailed logging of liked messages with message content
   const logDetailedLikedMessages = useCallback(async () => {
     if (!currentUsername || !likedMessagesCache || likedMessagesCache.length === 0) return;
-    
-    try {
-      // Get all messages from the API
-      const response = await apiService.getAllMessages(null, currentUsername);
-      
-      // Check for the correct response structure for the API
-      if (response && response.messages && Array.isArray(response.messages)) {
-        // Filter for messages that are in the user's liked messages
-        const likedMessagesDetails = response.messages.filter(message => {
-          const messageId = message._id || message.dbId; // Server may use _id
-          return messageId && likedMessagesCache.some(id => 
-            id.toString() === messageId.toString()
-          );
-        });
-        
-        
-        // Sort by most recent first and log details
-        const sortedMessages = likedMessagesDetails.sort((a, b) => 
-          new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp)
+
+
+    // Get all messages from the API
+    const response = await apiService.getAllMessages(null, currentUsername);
+
+    // Check for the correct response structure for the API
+    if (response && response.messages && Array.isArray(response.messages)) {
+      // Filter for messages that are in the user's liked messages
+      const likedMessagesDetails = response.messages.filter(message => {
+        const messageId = message._id || message.dbId; // Server may use _id
+        return messageId && likedMessagesCache.some(id =>
+          id.toString() === messageId.toString()
         );
-        
-        if (sortedMessages.length === 0) {
-        } else {
-          sortedMessages.forEach((message, index) => {
-            const messageText = message.text || message.content || '';
-            const timestamp = new Date(message.createdAt || message.timestamp).toLocaleString();
-          });
-        }
-        
-      } else {
-      }
-    } catch (error) {
-      console.error('Error fetching detailed liked messages:', error);
+      });
+
+
+      // Sort by most recent first and log details
+      const sortedMessages = likedMessagesDetails.sort((a, b) =>
+        new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp)
+      );
+
+      if (sortedMessages.length === 0) return;
+
     }
   }, [currentUsername, likedMessagesCache]);
-  
+
   // Call the detailed logger when likedMessagesCache changes
   useEffect(() => {
-    if (likedMessagesCache && likedMessagesCache.length > 0) {
+    if (likedMessagesCache?.length > 0) {
       logDetailedLikedMessages();
     }
   }, [likedMessagesCache, logDetailedLikedMessages]);
@@ -941,29 +858,27 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   // Function to update light preset based on current viewport location
   const updateLightPresetForLocation = useCallback(() => {
     if (!mapRef.current) return;
-    
+
     const now = new Date();
     const preset = getLightPresetForTime(now, viewState.latitude, viewState.longitude);
-    
-    // Log the location and calculated preset
-    console.log(`Recalibrating light preset at ${viewState.latitude.toFixed(2)}, ${viewState.longitude.toFixed(2)} - now ${preset}`);
-    
+
+
     // Update the light preset if it's different
     if (preset !== lightPreset) {
       setLightPreset(preset);
-      
+
       if (mapRef.current?.getMap()?.isStyleLoaded()) {
-    const map = mapRef.current.getMap();
+        const map = mapRef.current.getMap();
         map.setConfigProperty('basemap', 'lightPreset', preset);
       }
     }
-    
+
     // Update last viewport position
     lastViewportRef.current = {
       latitude: viewState.latitude,
       longitude: viewState.longitude
     };
-    
+
     // Update timestamp
     lastLightUpdateRef.current = now.getTime();
   }, [viewState.latitude, viewState.longitude, lightPreset]);
@@ -974,24 +889,23 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     if (lastViewportRef.current.latitude === null) {
       updateLightPresetForLocation();
     }
-    
+
     // Set up interval to periodically check for time changes (every minute)
     const intervalId = setInterval(() => {
       const updatedNow = new Date();
       const updatedPreset = getLightPresetForTime(updatedNow, viewState.latitude, viewState.longitude);
-      
+
       if (updatedPreset !== lightPreset) {
-        console.log(`Updating light preset to ${updatedPreset} based on current time`);
         setLightPreset(updatedPreset);
         lastLightUpdateRef.current = updatedNow.getTime();
-        
+
         if (mapRef.current?.getMap()?.isStyleLoaded()) {
           const map = mapRef.current.getMap();
           map.setConfigProperty('basemap', 'lightPreset', updatedPreset);
         }
       }
     }, 60000); // Check every minute
-    
+
     return () => clearInterval(intervalId);
   }, [lightPreset, viewState.latitude, viewState.longitude, updateLightPresetForLocation]);
 
@@ -1002,17 +916,16 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
       latitude: viewState.latitude,
       longitude: viewState.longitude
     };
-    
+
     const now = new Date();
     const initialPreset = getLightPresetForTime(now, initialLocation.latitude, initialLocation.longitude);
-    console.log(`Setting initial light preset: ${initialPreset} at ${initialLocation.latitude.toFixed(2)}, ${initialLocation.longitude.toFixed(2)}`);
     setLightPreset(initialPreset);
   }, []);
 
   // Add a listener for weather updates from the WeatherWidget
   const handleWeatherUpdate = useCallback((weatherData) => {
     setCurrentWeather(weatherData);
-    
+
     // Apply weather effects to map if we have both map and weather data
     if (mapRef.current && weatherData && weatherData.weather && weatherData.weather[0]) {
       const map = mapRef.current.getMap();
@@ -1026,42 +939,37 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     const handleStyleLoad = () => {
       if (mapRef.current) {
         const map = mapRef.current.getMap();
-        
+
         // Apply current light preset immediately when style loads
-        console.log(`Applying light preset ${lightPreset} on map style load`);
         map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-        
+
         // Apply globe projection
-        console.log('Setting globe projection on map style load');
         map.setProjection('globe');
 
         // Add atmosphere effect
-        try {
-          // Add atmosphere effect with improved settings for less bright skyline
-          map.setFog({
-            'color': 'rgb(156, 180, 205)', // softer light blue
-            'high-color': 'rgb(36, 92, 223)', // deep blue
-            'horizon-blend': 0.015, // reduced blend for sharper horizon
-            'space-color': 'rgb(11, 11, 25)', // dark space color
-            'star-intensity': 0.7, // slightly more visible stars
-            'range': [2.0, 14] // Raised fog layer significantly higher to clear skyline
-          });
-          
-          // Apply weather effects if we have weather data
-          if (currentWeather && currentWeather.weather && currentWeather.weather[0]) {
-            applyWeatherEffectsToMap(map, currentWeather.weather[0].id);
-          }
-          
-          console.log('Applied atmosphere and star field to globe view');
-        } catch (err) {
-          console.warn('Could not apply globe effects:', err);
+
+        // Add atmosphere effect with improved settings for less bright skyline
+        map.setFog({
+          'color': 'rgb(156, 180, 205)', // softer light blue
+          'high-color': 'rgb(36, 92, 223)', // deep blue
+          'horizon-blend': 0.015, // reduced blend for sharper horizon
+          'space-color': 'rgb(11, 11, 25)', // dark space color
+          'star-intensity': 0.7, // slightly more visible stars
+          'range': [2.0, 14] // Raised fog layer significantly higher to clear skyline
+        });
+
+        // Apply weather effects if we have weather data
+        if (currentWeather && currentWeather.weather && currentWeather.weather[0]) {
+          applyWeatherEffectsToMap(map, currentWeather.weather[0].id);
         }
-        
+
+
+
         // Then recalculate based on current viewport (which might have changed)
         updateLightPresetForLocation();
-        
+
         // Enable 3D objects if in 3D mode
-    if (is3DMode) {
+        if (is3DMode) {
           map.setConfigProperty('basemap', 'show3dObjects', true);
         }
       }
@@ -1070,13 +978,13 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
     // Add event listener for style load
     if (mapRef.current && mapRef.current.getMap()) {
       const map = mapRef.current.getMap();
-      
+
       if (map.isStyleLoaded()) {
         handleStyleLoad();
       } else {
         map.once('style.load', handleStyleLoad);
       }
-      
+
       return () => {
         if (map) {
           map.off('style.load', handleStyleLoad);
@@ -1096,25 +1004,25 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   const handleMapMove = useCallback((evt) => {
     // Update viewState with the new map position
     setViewState(evt.viewState);
-    
+
     // Clear any existing timeout to reset the timer
     if (moveTimeoutRef.current) {
       clearTimeout(moveTimeoutRef.current);
     }
-    
+
     // Create a new timeout to detect when movement stops
     moveTimeoutRef.current = setTimeout(() => {
       // Check if we've moved a significant distance (0.05 degrees ~ 5-6km)
-      const hasMovedSignificantly = !lastViewportRef.current.latitude || 
+      const hasMovedSignificantly = !lastViewportRef.current.latitude ||
         Math.abs(lastViewportRef.current.latitude - evt.viewState.latitude) > 0.05 ||
         Math.abs(lastViewportRef.current.longitude - evt.viewState.longitude) > 0.05;
-      
+
       // Only recalculate if we've moved significantly or it's been more than 5 minutes
       const currentTime = new Date().getTime();
       if (hasMovedSignificantly || currentTime - lastLightUpdateRef.current > 5 * 60 * 1000) {
         updateLightPresetForLocation();
       }
-      
+
       // Add globe-specific smoothing if needed
       if (evt.viewState.zoom < 1.5) {
         // For very zoomed out globe views, ensure we don't get too close to the poles
@@ -1139,7 +1047,6 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   useEffect(() => {
     if (mapRef.current?.getMap()?.isStyleLoaded()) {
       const map = mapRef.current.getMap();
-      console.log(`Light preset changed to ${lightPreset}, applying to map immediately`);
       map.setConfigProperty('basemap', 'lightPreset', lightPreset);
     }
   }, [lightPreset]);
@@ -1148,37 +1055,21 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
   useEffect(() => {
     // Always set up 3D features for the map
     if (mapRef.current) {
-      try {
-        // Configure the map for 3D mode
-        mapRef.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
-        mapRef.current.setConfigProperty('basemap', 'show3dObjects', true);
-        
-        // Set initial pitch for 3D perspective
-        mapRef.current.setPitch(45);
-        
-        // Only show 3D loading indicator once
-        if (!hasSetInitialPosition.current) {
-          hasSetInitialPosition.current = true;
-        }
-      } catch (err) {
-        console.error('Error configuring 3D mode:', err);
+
+      // Configure the map for 3D mode
+      mapRef.current.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 });
+      mapRef.current.setConfigProperty('basemap', 'show3dObjects', true);
+
+      // Set initial pitch for 3D perspective
+      mapRef.current.setPitch(45);
+
+      // Only show 3D loading indicator once
+      if (!hasSetInitialPosition.current) {
+        hasSetInitialPosition.current = true;
       }
+
     }
   }, [mapRef]);
-
-  // Always use 3D mode - no need for state toggle anymore
-  // const [is3DMode, setIs3DMode] = useState(true);
-  
-  // Always use 3D settings
-  const mapConfig = {
-    show3dObjects: true,
-    lightPreset: lightPreset
-  };
-
-  // Add this toggle function if it doesn't exist
-  const toggleWeatherEffects = () => {
-    setWeatherEffectsEnabled(!weatherEffectsEnabled);
-  };
 
   return (
     <div className={`map-container globe-view light-preset-${lightPreset}`}>
@@ -1212,13 +1103,13 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             <p>Refreshing pins...</p>
           </div>
         )}
-        
+
         {/* Only show weather widget when weather effects are enabled */}
-        <MemoizedWeatherWidget 
+        <MemoizedWeatherWidget
           {...weatherWidgetProps}
           onWeatherUpdate={handleWeatherUpdate}
         />
-        
+
         {messagesWithLocation.map((message, index) => (
           <Marker
             key={index}
@@ -1228,10 +1119,10 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             onClick={e => onSelectMessage(e, message)}
           >
             <div className="map-marker">
-              <AvatarPlaceholder 
-                username={message.sender} 
-                size="40px" 
-                className="marker-avatar" 
+              <AvatarPlaceholder
+                username={message.sender}
+                size="40px"
+                className="marker-avatar"
               />
               {onlineUsers && onlineUsers[message.sender] && (
                 <span className="online-indicator-map"></span>
@@ -1252,20 +1143,20 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
             className={`map-popup ${isDarkMode ? 'dark-mode' : ''}`}
             maxWidth="300px"
           >
-            <div 
+            <div
               className={`message-card ${isDarkMode ? 'dark-mode' : ''}`}
               onClick={(e) => e.stopPropagation()} // Prevent clicks from bubbling up to map
             >
               <div className="message-card-header">
-                <AvatarPlaceholder 
-                  username={selectedMessage.sender} 
-                  size="40px" 
+                <AvatarPlaceholder
+                  username={selectedMessage.sender}
+                  size="40px"
                   className="message-avatar"
                   onClick={(e) => navigateToProfile(selectedMessage.sender, e)}
                   style={{ cursor: 'pointer' }}
                 />
                 <div className="message-sender-info">
-                  <span 
+                  <span
                     className="message-sender"
                     onClick={(e) => navigateToProfile(selectedMessage.sender, e)}
                     style={{ cursor: 'pointer' }}
@@ -1289,7 +1180,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
                 {renderTextWithLinks(selectedMessage.content)}
               </div>
               <div className="message-card-footer">
-                <button 
+                <button
                   ref={likeButtonRef}
                   className={`like-button ${isLiked ? 'liked' : ''}`}
                   onClick={handleLikeMessage}
@@ -1297,19 +1188,19 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
                   title={currentUsername ? 'Like this message' : 'Sign in to like messages'}
                   tabIndex="-1"
                 >
-                  {isLiked ? 
-                    <GoHeartFill className="heart-filled" /> : 
+                  {isLiked ?
+                    <GoHeartFill className="heart-filled" /> :
                     <GoHeart className="heart-outline" />
                   }
                   <span className="like-count">{likesCount > 0 ? likesCount : ''}</span>
                 </button>
-                <button 
+                <button
                   className="location-button"
                   onClick={() => alert(`Location: ${selectedMessage.location.latitude}, ${selectedMessage.location.longitude}${selectedMessage.location.fuzzyLocation === false ? ' (Exact)' : ' (Approximate)'}`)}
                   title="View location details"
                   tabIndex="-1"
                 >
-                  <GoLocation className="location-icon" /> 
+                  <GoLocation className="location-icon" />
                   {selectedMessage.location.fuzzyLocation === false ? 'Exact' : 'Approximate'}
                 </button>
               </div>
@@ -1319,9 +1210,9 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
         {/* Vessel tracking layer */}
         {showVesselTracking && vesselTrackingInitialized && mapRef.current && (
-          <VesselLayer 
-            map={mapRef.current.getMap()} 
-            visible={showVesselTracking} 
+          <VesselLayer
+            map={mapRef.current.getMap()}
+            visible={showVesselTracking}
             refreshInterval={10000} // Refresh every 10 seconds
           />
         )}
@@ -1332,69 +1223,56 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
         <div className={`time-indicator ${lightPreset}`} title={`Current lighting: ${lightPreset}`}>
           {lightPreset === 'day' && (
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5"/>
-              <line x1="12" y1="1" x2="12" y2="3"/>
-              <line x1="12" y1="21" x2="12" y2="23"/>
-              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-              <line x1="1" y1="12" x2="3" y2="12"/>
-              <line x1="21" y1="12" x2="23" y2="12"/>
-              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
             </svg>
           )}
           {lightPreset === 'dawn' && (
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v8"/>
-              <path d="M5.2 11.2l1.4 1.4"/>
-              <path d="M2 18h2"/>
-              <path d="M20 18h2"/>
-              <path d="M17.4 12.6l1.4-1.4"/>
-              <path d="M22 22H2"/>
-              <path d="M8 6l4-4 4 4"/>
-              <path d="M16 18a4 4 0 0 0-8 0"/>
+              <path d="M12 2v8" />
+              <path d="M5.2 11.2l1.4 1.4" />
+              <path d="M2 18h2" />
+              <path d="M20 18h2" />
+              <path d="M17.4 12.6l1.4-1.4" />
+              <path d="M22 22H2" />
+              <path d="M8 6l4-4 4 4" />
+              <path d="M16 18a4 4 0 0 0-8 0" />
             </svg>
           )}
           {lightPreset === 'dusk' && (
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 10v2"/>
-              <path d="M12 22v-2"/>
-              <path d="M5.2 11.2l1.4 1.4"/>
-              <path d="M2 18h2"/>
-              <path d="M20 18h2"/>
-              <path d="M17.4 12.6l1.4-1.4"/>
-              <path d="M22 22H2"/>
-              <path d="M16 6l-4 4-4-4"/>
-              <path d="M16 18a4 4 0 0 0-8 0"/>
+              <path d="M12 10v2" />
+              <path d="M12 22v-2" />
+              <path d="M5.2 11.2l1.4 1.4" />
+              <path d="M2 18h2" />
+              <path d="M20 18h2" />
+              <path d="M17.4 12.6l1.4-1.4" />
+              <path d="M22 22H2" />
+              <path d="M16 6l-4 4-4-4" />
+              <path d="M16 18a4 4 0 0 0-8 0" />
             </svg>
           )}
           {lightPreset === 'night' && (
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
             </svg>
           )}
           <span className="light-label">{lightPreset}</span>
         </div>
       </div>
 
-      {/* Map controls */}
-      <div className="map-controls">
-        <button 
-          className={`map-control-button ${is3DMode ? 'active' : ''}`}
-          onClick={toggle3DMode}
-          title={is3DMode ? 'Disable 3D buildings' : 'Enable 3D buildings'}
-        >
-          <span className="control-icon">🏙️</span>
-        </button>
-        
-        {/* Weather and vessel tracking buttons removed - these features are now always enabled */}
-      </div>
-      
       {/* Group location button and compose button together */}
       <div className="map-action-buttons">
         {/* User location button */}
         {userLocation && (
-          <button 
+          <button
             className="location-control-button"
             onClick={() => {
               mapRef.current.getMap().flyTo({
@@ -1416,7 +1294,7 @@ const MapView = ({ messages, currentUsername, onlineUsers, userLocation, isDarkM
 
         {/* FloatingActionButton positioned under location button */}
         <div className="compose-button-container">
-          <FloatingActionButton 
+          <FloatingActionButton
             onClick={onOpenModal}
             isDarkMode={isDarkMode}
             style={{ position: 'relative' }}
@@ -1474,7 +1352,7 @@ MapView.defaultProps = {
   isDarkMode: false,
   isLoading: false,
   onRefreshMap: null,
-  onOpenModal: () => console.log("Open modal function not provided")
+  onOpenModal: () => { }
 };
 
 export default MapView; 

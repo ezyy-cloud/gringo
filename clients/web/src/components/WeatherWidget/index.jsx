@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { GoSun, GoCloud, GoCloudOffline } from "react-icons/go";
+import {  GoCloud, GoCloudOffline } from "react-icons/go";
 import { WiDaySunny, WiCloudy, WiRain, WiSnow, WiThunderstorm, WiFog } from "react-icons/wi";
 import WeatherForecastModal from '../WeatherForecastModal';
 import './styles.css';
@@ -38,12 +38,7 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
   useEffect(() => {
     const fetchWeather = async () => {
       if (!latitude || !longitude) return;
-      
-      console.log('🌤️ Weather API: Initiating weather data fetch for coordinates:', {
-        latitude: latitude.toFixed(4),
-        longitude: longitude.toFixed(4),
-        timestamp: new Date().toISOString()
-      });
+  
       
       try {
         if (!weather) {
@@ -59,13 +54,6 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
         }
 
         const data = await response.json();
-        console.log('🌤️ Weather API: Successfully received weather data:', {
-          location: data.name,
-          country: data.sys.country,
-          temperature: `${Math.round(data.main.temp)}°C`,
-          conditions: data.weather[0].description,
-          timestamp: new Date().toISOString()
-        });
 
         setWeather(data);
         setError(null);
@@ -76,17 +64,9 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
         if (onWeatherUpdate && typeof onWeatherUpdate === 'function') {
           onWeatherUpdate(data);
         }
-      } catch (err) {
+      } catch {
         const errorMessage = 'Could not load weather data';
-        console.error('🌤️ Weather API Error:', {
-          message: err.message,
-          coordinates: {
-            latitude: latitude.toFixed(4),
-            longitude: longitude.toFixed(4)
-          },
-          timestamp: new Date().toISOString(),
-          error: err
-        });
+        
         setError(errorMessage);
       } finally {
         setLoading(false);
@@ -95,7 +75,6 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
 
     // Initial fetch when component mounts - fetch immediately
     if (!hasInitialFetchRef.current) {
-      console.log('🌤️ Weather API: Doing initial fetch without delay');
       fetchWeather();
       return;
     }
@@ -110,37 +89,27 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
 
     // If no significant change, don't reset the timeout or loading state
     if (!significantChange) {
-      console.log('🌤️ Weather API: Coordinates haven\'t changed significantly, continuing with current weather data');
       return;
     }
 
     // Clear any existing timeout if coordinates have changed significantly
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
-      console.log('🌤️ Weather API: Cleared previous fetch timeout due to significant coordinate change');
     }
 
     // Set a new timeout to fetch weather data after 10 seconds of no significant coordinate changes
     // This is much quicker than the previous 1 minute delay
-    console.log('🌤️ Weather API: Setting 10-second delay for new coordinates', {
-      latitude: latitude.toFixed(4),
-      longitude: longitude.toFixed(4),
-      delayTime: '10 seconds'
-    });
 
     timeoutRef.current = setTimeout(() => {
-      console.log('🌤️ Weather API: 10-second delay completed, initiating fetch');
       fetchWeather();
       
       // Set up the 5-minute refresh interval after the initial fetch
       const interval = setInterval(() => {
-        console.log('🌤️ Weather API: 5-minute refresh interval triggered');
         fetchWeather();
       }, 5 * 60 * 1000);
       
       return () => {
         clearInterval(interval);
-        console.log('🌤️ Weather API: Cleared 5-minute refresh interval');
       };
     }, 10 * 1000); // 10 seconds delay instead of 1 minute
 
@@ -148,7 +117,6 @@ const WeatherWidget = ({ latitude, longitude, isDarkMode, onWeatherUpdate }) => 
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
-        console.log('🌤️ Weather API: Cleanup - cleared fetch timeout');
       }
     };
   }, [latitude, longitude, weather, onWeatherUpdate]);

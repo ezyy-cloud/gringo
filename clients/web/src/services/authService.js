@@ -94,12 +94,7 @@ const authService = {
     try {
       const response = await api.get('/me');
       
-      // Debug logging for API response
-      
-      if (response.data.success && response.data.data.user) {
-        
-      }
-      
+
       return response.data;
     } catch (error) {
       
@@ -129,14 +124,7 @@ const authService = {
     const user = localStorage.getItem('user');
     const parsedUser = user ? JSON.parse(user) : null;
     
-    // Debug logging for local storage user
-    if (parsedUser) {
-      
-      
-    } else {
-      
-    }
-    
+
     return parsedUser;
   },
 
@@ -164,31 +152,25 @@ const authService = {
   
   // Check if user is logged in
   checkLoginStatus: async () => {
-    console.log('AuthService: checkLoginStatus called');
     
     // First, check if we have a token
     const token = localStorage.getItem('token');
     if (!token) {
-      console.log('AuthService: No token found in localStorage');
       return null;
     }
     
     try {
-      console.log('AuthService: Token found, validating with server');
       // Make API call to validate token
       const response = await api.get('/me');
       
       if (response.data.success && response.data.data.user) {
-        console.log('AuthService: Token is valid, user authenticated:', response.data.data.user.username);
         return response.data.data.user;
       } else {
-        console.log('AuthService: Token validation failed:', response);
         // Clear invalid token
         localStorage.removeItem('token');
         return null;
       }
-    } catch (error) {
-      console.error('AuthService: Error checking login status:', error);
+    } catch {
       // If there's an error (like 401 Unauthorized), clear the token
       localStorage.removeItem('token');
       return null;
@@ -198,11 +180,9 @@ const authService = {
   // Refresh auth token
   refreshToken: async () => {
     try {
-      console.log('Attempting to refresh auth token');
       const response = await api.post('/refresh-token');
       
       if (response.data.success) {
-        console.log('Token refreshed successfully');
         // Store new token
         localStorage.setItem('token', response.data.data.token);
         
@@ -213,10 +193,8 @@ const authService = {
         return true;
       }
       
-      console.warn('Token refresh failed: Server did not return success');
       return false;
-    } catch (error) {
-      console.error('Token refresh error:', error);
+    } catch {
       return false;
     }
   }

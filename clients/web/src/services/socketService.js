@@ -13,8 +13,7 @@ const createSocketUrl = (url) => {
     // Parse the URL to extract just the origin part (protocol + host + port)
     const urlObj = new URL(url);
     return urlObj.origin;
-  } catch (e) {
-    console.error('🔌 SocketService: Invalid URL format, using window.location.origin instead');
+  } catch {
     return window.location.origin;
   }
 };
@@ -26,13 +25,11 @@ const SOCKET_SERVER_URL = createSocketUrl(API_URL);
 const socketService = {
   // Connect to the server
   connect: (callbacks = {}, username = null) => {
-    console.log(`🔌 SocketService: Connecting to socket with URL: ${SOCKET_SERVER_URL}`);
     // Get the main socket client from the factory
     const mainClient = socketClientFactory.getClient('main', 'main', SOCKET_SERVER_URL);
     
     // Ensure any existing socket is disconnected first
     if (mainClient.isConnected()) {
-      console.log('🔌 SocketService: Closing existing connection before reconnecting');
       mainClient.disconnect();
     }
     
@@ -107,7 +104,6 @@ const socketService = {
   
   // Diagnostic method to check if server is reachable
   checkServerStatus: async () => {
-    console.log('🔌 SocketService: Checking server status at:', API_URL);
     
     // Add timestamp tracking to prevent excessive calls
     const now = Date.now();
@@ -116,7 +112,6 @@ const socketService = {
     const minTimeBetweenChecks = 10000; // 10 seconds minimum between checks
     
     if (now - lastCheck < minTimeBetweenChecks) {
-      console.log('🔌 SocketService: Skipping server check - too soon since last check');
       
       // Return the last result if available
       const lastResultKey = 'socketService_lastServerCheckResult';
@@ -149,7 +144,6 @@ const socketService = {
     const endpoint = endpointsToTry[0]; // Just use the first endpoint
     
     try {
-      console.log(`🔌 SocketService: Trying endpoint ${endpoint}`);
       
       // For the messages endpoint, use a GET request since it's likely to require auth
       const authToken = localStorage.getItem('token');
@@ -168,9 +162,6 @@ const socketService = {
         headers: headers
       });
       
-      // Any response (even 404 or 401) indicates the server is reachable
-      console.log(`🔌 SocketService: Got response from ${endpoint} with status:`, response.status);
-      
       const result = {
         success: response.ok || response.status === 401, // 401 means server is up but we need auth
         message: `Server is reachable (${endpoint})`,
@@ -183,7 +174,6 @@ const socketService = {
       
       return result;
     } catch (error) {
-      console.error(`🔌 SocketService: Failed to fetch ${endpoint}:`, error);
       
       const result = {
         success: false,
@@ -210,14 +200,12 @@ const socketService = {
   
   // Enable fallback mode (for when the server is unreachable)
   enableFallbackMode: () => {
-    console.log('🔌 SocketService: Enabling fallback mode');
     const mainClient = socketClientFactory.getClient('main');
     mainClient.enableFallbackMode();
   },
   
   // Disable fallback mode and attempt normal connection
   disableFallbackMode: () => {
-    console.log('🔌 SocketService: Disabling fallback mode');
     const mainClient = socketClientFactory.getClient('main');
     mainClient.disableFallbackMode();
   },

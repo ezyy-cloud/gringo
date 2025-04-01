@@ -1,6 +1,6 @@
 import axios from 'axios';
 import socketService from './socketService'; // Import socketService to get socket ID
-import { getStatusFallback, getMessagesFallback, cacheMessages } from '../utils/api-fallbacks';
+import { getStatusFallback } from '../utils/api-fallbacks';
 
 // Server URL - from environment variables
 const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -19,32 +19,26 @@ let isInFallbackMode = false;
 
 // Helper method to get the auth token from localStorage
 const getAuthToken = () => {
-  console.log('ApiService: Getting auth token');
   const token = localStorage.getItem('token');
-  console.log('ApiService: Token exists:', !!token);
   return token;
 };
 
 // Add request/response interceptors to add authentication headers and handle errors
 api.interceptors.request.use(
   (config) => {
-    console.log('ApiService: Intercepting request to:', config.url);
     const token = getAuthToken();
     if (token) {
-      console.log('ApiService: Adding auth token to request');
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
-    console.error('ApiService: Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 api.interceptors.response.use(
   (response) => {
-    console.log('ApiService: Response received success');
     
     // If we successfully got a response, we're not in fallback mode
     isInFallbackMode = false;
@@ -52,11 +46,9 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('ApiService: Response error:', error.response?.status, error.response?.data);
     
     // Handle rate limiting (429) errors
     if (error.response && error.response.status === 429) {
-      console.warn('ApiService: Rate limited (429 Too Many Requests) - implementing backoff');
       
       // Store the time of rate limiting for backoff
       const now = Date.now();
@@ -72,7 +64,6 @@ api.interceptors.response.use(
     
     // If status is 401 Unauthorized, clear token and redirect to login
     if (error.response && error.response.status === 401) {
-      console.log('ApiService: 401 Unauthorized response, clearing token');
       // Only redirect if the error was for an API endpoint, not for socket.io
       if (!error.config.url.includes('socket.io')) {
         localStorage.removeItem('token');
@@ -82,7 +73,6 @@ api.interceptors.response.use(
     
     // Network errors indicate server might be unreachable
     if (error.code === 'ECONNABORTED' || error.message.includes('Network Error')) {
-      console.log('ApiService: Network error - server may be unreachable');
       isInFallbackMode = true;
     }
     
@@ -101,13 +91,11 @@ const apiService = {
   // Enable fallback mode manually
   enableFallbackMode: () => {
     isInFallbackMode = true;
-    console.log('ApiService: Fallback mode enabled manually');
   },
   
   // Disable fallback mode manually
   disableFallbackMode: () => {
     isInFallbackMode = false;
-    console.log('ApiService: Fallback mode disabled manually');
   },
   
   // Check server status - used to determine if we should be in fallback mode
@@ -116,8 +104,7 @@ const apiService = {
       const response = await api.get('/api/status');
       isInFallbackMode = false;
       return response.data;
-    } catch (error) {
-      console.error('ApiService: Error checking server status:', error);
+    } catch {
       isInFallbackMode = true;
       return getStatusFallback();
     }
@@ -125,13 +112,8 @@ const apiService = {
 
   // Get server status
   getStatus: async () => {
-    try {
-      const response = await api.get('/api/status');
-      return response.data;
-    } catch (error) {
-      
-      throw error;
-    }
+    const response = await api.get('/api/status');
+    return response.data;
   },
 
   // Send a message via API
@@ -140,23 +122,15 @@ const apiService = {
       // Get current socket ID to identify the sender
       const socketId = socketService.getSocketId();
       
-      console.log('ApiService: Sending message via API', {
-        message,
-        username,
-        location
-      });
-      
       const response = await api.post('/api/messages', { 
         message,
         socketId, // Include socket ID so server knows who sent it
         username, // Include username for display
         location  // Include location data
       });
-      
-      console.log('ApiService: Message sent successfully via API:', response.data);
+
       return response.data;
     } catch (error) {
-      console.error('ApiService: Error sending message:', error);
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Unknown error'
@@ -183,13 +157,12 @@ const apiService = {
       if (!formData.has('username')) {
         // Get the username from localStorage or parse from token
         let username = null;
-        try {
+  
           // Try to get the current user from localStorage
           const userJson = localStorage.getItem('user');
           if (userJson) {
             const user = JSON.parse(userJson);
             username = user.username;
-            console.log('ApiService: Using username from localStorage:', username);
           }
           
           // If no username found and we have a token, try to get it from there
@@ -200,7 +173,6 @@ const apiService = {
               const payload = JSON.parse(atob(tokenParts[1]));
               if (payload.username) {
                 username = payload.username;
-                console.log('ApiService: Using username from token payload:', username);
               }
             }
           }
@@ -208,18 +180,9 @@ const apiService = {
           // Add username to the form data if found
           if (username) {
             formData.append('username', username);
-            console.log('ApiService: Added username to formData:', username);
-          } else {
-            console.warn('ApiService: No username found for message with image!');
           }
-        } catch (userError) {
-          console.error('ApiService: Error getting username:', userError);
-        }
-      } else {
-        console.log('ApiService: Username already in formData, using existing value');
-      }
+        } 
       
-      console.log('ApiService: Sending message with image via API');
       
       // Use axios directly for multipart/form-data
       const response = await axios({
@@ -232,10 +195,8 @@ const apiService = {
         }
       });
       
-      console.log('ApiService: Message with image sent successfully:', response.data);
       return response.data;
     } catch (error) {
-      console.error('ApiService: Error sending message with image:', error);
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Unknown error'
@@ -256,7 +217,6 @@ const apiService = {
       // Get auth token
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Authentication token missing when fetching user messages');
         return { success: false, message: 'Authentication token missing' };
       }
       
@@ -272,13 +232,12 @@ const apiService = {
       }
       
       // Ensure response has success flag for consistency
-      if (response.data && !response.data.hasOwnProperty('success')) {
-        response.data.success = true;
+      if (response.data) {
+        response.data.success = response.data.success ?? true;
       }
       
       // Validate that data.messages exists in the response
       if (response.data.success && (!response.data.data || !response.data.data.messages)) {
-        console.error('Missing messages array in server response:', response.data);
         return { 
           success: false, 
           message: 'Invalid server response format',
@@ -288,7 +247,6 @@ const apiService = {
       
       return response.data;
     } catch (error) {
-      console.error('Error fetching user messages:', error);
       
       // Return structured error for better handling
       return {
@@ -329,7 +287,6 @@ const apiService = {
       // Get auth token
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Authentication token missing');
         return { success: false, message: 'Authentication token missing' };
       }
       
@@ -339,14 +296,13 @@ const apiService = {
         }
       });
       
-      // Add success flag for consistency
-      if (response.data && !response.data.hasOwnProperty('success')) {
-        response.data.success = true;
+      // Ensure response has success flag for consistency
+      if (response.data) {
+        response.data.success = response.data.success ?? true;
       }
       
       return response.data;
     } catch (error) {
-      console.error('Error fetching messages:', error);
       
       // Return structured error for better handling
       return {
@@ -370,7 +326,6 @@ const apiService = {
       // Get auth token once
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Authentication token missing');
         return { success: false, message: 'Authentication token missing' };
       }
       
@@ -404,7 +359,6 @@ const apiService = {
         }).then(res => res.data);
         
         if (!response.success || !response.messages || !Array.isArray(response.messages)) {
-          console.error('Error or invalid response format when fetching messages page', page, response);
           break;
         }
         
@@ -449,7 +403,6 @@ const apiService = {
         }
       };
     } catch (error) {
-      console.error('Error in auto-pagination:', error);
       return {
         success: false,
         message: 'Failed to fetch all messages with auto-pagination',
@@ -461,7 +414,6 @@ const apiService = {
   // Get messages (latest messages with online users)
   getMessages: async (minutesWindow = 30) => {
     try {
-      console.log('🔍 ApiService.getMessages: Starting to fetch messages from server');
       
       // Check for recent rate limiting
       const rateLimitedAt = parseInt(localStorage.getItem('api_rate_limited_at') || '0');
@@ -469,11 +421,9 @@ const apiService = {
       const backoffTime = 30000; // 30 seconds backoff after rate limiting
       
       if (rateLimitedAt > 0 && now - rateLimitedAt < backoffTime) {
-        console.warn(`🔍 ApiService.getMessages: Recently rate limited, backing off (${Math.round((now - rateLimitedAt)/1000)}s elapsed of ${backoffTime/1000}s backoff)`);
         
         // Return cached messages if available
         if (cachedMessages && cachedMessages.length > 0) {
-          console.log('🔍 ApiService.getMessages: Returning cached messages during backoff');
           return {
             success: true,
             messages: cachedMessages,
@@ -493,15 +443,12 @@ const apiService = {
       // Get auth token
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('🔍 ApiService.getMessages: Authentication token missing');
         return { success: false, message: 'Authentication token missing' };
       }
-      console.log('🔍 ApiService.getMessages: Auth token retrieved successfully');
       
       // Get current username from localStorage for like status
       const userData = localStorage.getItem('user');
       const currentUsername = userData ? JSON.parse(userData).username : null;
-      console.log('🔍 ApiService.getMessages: Current username:', currentUsername);
       
       // Build query parameters
       const params = new URLSearchParams();
@@ -527,73 +474,47 @@ const apiService = {
       let url = `/api/messages?${params.toString()}`;
       
       // For debugging, let's log the exact URL we're requesting
-      console.log('🔍 ApiService.getMessages: Requesting URL:', `${SERVER_URL}${url}`);
-      console.log('🔍 ApiService.getMessages: Filtering for messages newer than:', minCreatedAt);
       
-      try {
+   
         const response = await api.get(url, {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-        
-        // Log raw response for debugging
-        console.log('🔍 ApiService.getMessages: Raw response status:', response.status, response.statusText);
-        
-        // For object responses, log structure
-        if (typeof response.data === 'object') {
-          console.log('🔍 ApiService.getMessages: Response data keys:', Object.keys(response.data));
-        }
-        
+
         // Extract messages based on different possible response formats
         let messages = [];
         let onlineUsers = {};
         
         // Case 1: response.data.data.messages format
         if (response.data && response.data.data && response.data.data.messages) {
-          console.log('🔍 ApiService.getMessages: Found messages in response.data.data.messages');
           messages = response.data.data.messages;
           onlineUsers = response.data.data.onlineUsers || {};
         }
         // Case 2: response.data.messages format
         else if (response.data && response.data.messages) {
-          console.log('🔍 ApiService.getMessages: Found messages in response.data.messages');
           messages = response.data.messages;
           onlineUsers = response.data.onlineUsers || {};
         }
         // Case 3: Array response format
         else if (Array.isArray(response.data)) {
-          console.log('🔍 ApiService.getMessages: Response data is an array of messages');
           messages = response.data;
         }
         // Case 4: Unknown format but has data property
         else if (response.data && typeof response.data === 'object') {
           // Try to find a property that could be messages
           const possibleMessageArrays = Object.entries(response.data)
-            .filter(([_, value]) => Array.isArray(value))
-            .sort(([_, a], [__, b]) => b.length - a.length);
+            .filter(([, value]) => Array.isArray(value))
+            .sort(([, a], [, b]) => b.length - a.length);
           
           if (possibleMessageArrays.length > 0) {
-            const [key, value] = possibleMessageArrays[0];
-            console.log(`🔍 ApiService.getMessages: Found array in property "${key}" that might be messages`);
+            const [value] = possibleMessageArrays[0];
             messages = value;
           }
         }
 
         // If we found messages, check for location data
         if (messages.length > 0) {
-          console.log(`🔍 ApiService.getMessages: Found ${messages.length} messages`);
-          
-          // Check location data in messages
-          const messagesWithLocation = messages.filter(msg => 
-            msg.location && msg.location.latitude && msg.location.longitude
-          );
-          console.log(`🔍 ApiService.getMessages: Found ${messagesWithLocation.length} messages with location data out of ${messages.length}`);
-          
-          // Log sample message for debugging
-          if (messages.length > 0) {
-            console.log('🔍 ApiService.getMessages: Sample message:', messages[0]);
-          }
           
           // Return with consistent format
           return {
@@ -603,11 +524,6 @@ const apiService = {
           };
         }
         
-        // If we reached here and didn't return, log an error
-        console.error('🔍 ApiService.getMessages: No messages found in response:', response.data);
-        
-        // Generate sample test messages if no messages found
-        console.log('🔍 ApiService.getMessages: Generating test messages as fallback');
         const testMessages = Array(5).fill().map((_, index) => ({
           _id: `test-${index}`,
           messageId: `test-${index}`,
@@ -630,15 +546,8 @@ const apiService = {
           onlineUsers: {},
           isTestData: true
         };
-      } catch (innerError) {
-        console.error('🔍 ApiService.getMessages: Error during API request:', innerError.message);
-        throw innerError;
-      }
-    } catch (error) {
-      console.error('🔍 ApiService.getMessages: Error fetching messages:', error);
       
-      // Generate some test messages with location as a fallback
-      console.log('🔍 ApiService.getMessages: Generating test messages as fallback due to error');
+    } catch (error) {
       const testMessages = Array(5).fill().map((_, index) => ({
         _id: `test-error-${index}`,
         messageId: `test-error-${index}`,
@@ -687,7 +596,6 @@ const apiService = {
       
       return response.data;
     } catch (error) {
-      console.error('Error toggling message like:', error);
       return {
         success: false,
         message: error.response?.data?.message || 'Failed to toggle like status'
@@ -703,7 +611,7 @@ const apiService = {
   
   // Delete a message
   deleteMessage: async (messageId) => {
-    try {
+
       const token = localStorage.getItem('token');
       const response = await api.delete(`/api/messages/${messageId}`, {
         headers: {
@@ -711,21 +619,15 @@ const apiService = {
         }
       });
       return response.data;
-    } catch (error) {
-      console.error('Error deleting message:', error);
-      throw error;
-    }
+
   },
   
   // Get total likes for a user
   getUserLikes: async (username) => {
-    try {
+
       const response = await api.get(`/api/users/${username}/likes`);
       return response.data;
-    } catch (error) {
-      
-      throw error;
-    }
+
   },
   
   // Get messages liked by a user
@@ -741,7 +643,6 @@ const apiService = {
       // Get auth token
       const token = localStorage.getItem('token');
       if (!token) {
-        console.error('Authentication token missing');
         return { success: false, message: 'Authentication token missing' };
       }
       
@@ -753,21 +654,16 @@ const apiService = {
       
       // Validate the response structure
       if (!response.data) {
-        console.error('Empty response when fetching liked messages');
         return { success: false, message: 'Invalid response from server' };
       }
       
       // Ensure response has success flag for consistency
-      if (response.data && !response.data.hasOwnProperty('success')) {
-        response.data.success = true;
+      if (response.data) {
+        response.data.success = response.data.success ?? true;
       }
-      
-      // Log the response for debugging
-      console.log('Liked messages response:', response.data);
       
       return response.data;
     } catch (error) {
-      console.error('Error fetching liked messages:', error);
       return {
         success: false,
         message: error.response?.data?.message || 'Failed to fetch liked messages',

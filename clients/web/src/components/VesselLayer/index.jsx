@@ -6,10 +6,6 @@ import './styles.css';
 
 const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
   const [vessels, setVessels] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('initializing');
-  const [vesselCount, setVesselCount] = useState(0);
   const showVesselNames = false;
   const [darkMode, setDarkMode] = useState(false);
   const vesselGeoJSON = useRef({
@@ -49,34 +45,13 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
     if (!visible) return;
 
     try {
-      setLoading(true);
       const response = await axios.get('/api/vessels');
 
       if (response.data.success) {
         setVessels(response.data.vessels);
-        setConnectionStatus(
-          response.data.connectionStatus === 1 ? 'connected' :
-            response.data.connectionStatus === 0 ? 'connecting' :
-              response.data.connectionStatus === 2 ? 'closing' :
-                response.data.connectionStatus === 3 ? 'closed' :
-                  'unknown'
-        );
-
-        if (response.data.vessels.length === 0) {
-          // No error, but no vessels either - show helpful message
-          setError('No vessels currently available. This could be due to API key limitations or no vessel data in range.');
-        } else {
-          setError(null);
-        }
-      } else {
-        setError('Failed to fetch vessel data');
-        setConnectionStatus('error');
       }
-    } catch (err) {
-      setError(err.message || 'Failed to fetch vessel data');
-      setConnectionStatus('error');
-    } finally {
-      setLoading(false);
+    } catch {
+      // No error handling needed
     }
   }, [visible]);
 
@@ -92,7 +67,6 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
   // Convert vessels to GeoJSON format for Mapbox
   useEffect(() => {
     if (!vessels || !Array.isArray(vessels)) {
-      setError('Invalid vessel data received');
       return;
     }
 
@@ -107,7 +81,6 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
             vessel.latitude = vessel.Message.PositionReport.Latitude;
             vessel.longitude = vessel.Message.PositionReport.Longitude;
           } else {
-            console.warn('Vessel missing coordinates:', vessel);
             return null;
           }
         }
@@ -208,33 +181,22 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
         features
       };
 
-      setVesselCount(features.length);
-
-      // Clear error if we have valid vessel data
-      if (features.length > 0) {
-        setError(null);
-      }
-
       // Update the source if it exists and map is loaded
       if (map && mapLoadedRef.current && sourceAddedRef.current) {
-        try {
-          const source = map.getSource('vessels-source');
-          if (source) {
-            source.setData(vesselGeoJSON.current);
-          }
-        } catch (err) {
-          console.warn('Error updating vessel source data:', err);
+        const source = map.getSource('vessels-source');
+        if (source) {
+          source.setData(vesselGeoJSON.current);
         }
       }
-    } catch (err) {
-      setError(`Error processing vessel data: ${err.message}`);
+    } catch {
+      // No error handling needed as per the new code
     }
   }, [vessels, map]);
 
   // Get text description of ship type
   const getShipTypeText = (shipType) => {
     if (!shipType) return 'Unknown';
-    
+
     // Common ship types based on AIS type codes
     const shipTypes = {
       30: 'Fishing',
@@ -295,7 +257,7 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
       98: 'Other',
       99: 'Other'
     };
-    
+
     return shipTypes[shipType] || 'Other';
   };
 
@@ -316,172 +278,162 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
             data: vesselGeoJSON.current
           });
           sourceAddedRef.current = true;
-        } catch (err) {
-          console.error('Error adding vessel source:', err);
+        } catch {
           return; // Exit if we can't add the source
         }
       }
 
       // Add ship icon if it's not already loaded
       if (!map.hasImage('ship-icon')) {
-        try {
-          // Create an oval ship icon (top view) using canvas
-          const size = 50;  // Increased size from 38 to 50
-          const canvas = document.createElement('canvas');
-          canvas.width = size;
-          canvas.height = size;
-          const ctx = canvas.getContext('2d');
-          
-          // Ship shape drawing function - longer and thinner oval
-          const drawShip = (ctx, color) => {
-            ctx.clearRect(0, 0, size, size);
-            
-            // Begin ship shape
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            
-            // Draw a longer, thinner oval shape with pointed top and bottom
-            // Start at the bow (front/top point)
-            ctx.moveTo(size/2, 1);                 // Front point (sharp bow)
-            
-            // Right side - single smooth curve from top to bottom
-            ctx.bezierCurveTo(
-              size*0.75, size*0.25,               // Control point 1 - moved inward for thinner shape
-              size*0.75, size*0.75,               // Control point 2 - symmetric to create continuous curve
-              size/2, size-1                      // End point (stern/bottom point)
-            );
-            
-            // Left side - single smooth curve from bottom to top
-            ctx.bezierCurveTo(
-              size*0.25, size*0.75,               // Control point 1 - moved inward for thinner shape
-              size*0.25, size*0.25,               // Control point 2 - symmetric to create continuous curve
-              size/2, 1                           // End point (back to bow)
-            );
-            
-            ctx.closePath();
-            ctx.fill();
-            
-            // Fine outline for better definition
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 1.2;                  // Reduced from 1.5 to 1.2 for finer outline
-            ctx.stroke();
-          };
-          
-          // Draw the default green ship
-          drawShip(ctx, '#2ECC40');
-          
-          // Add the image to the map
-          map.addImage('ship-icon', { 
-            width: size, 
-            height: size, 
-            data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer) 
-          });
-          
-          // Add red ship icon (for fast vessels)
+
+        // Create an oval ship icon (top view) using canvas
+        const size = 50;  // Increased size from 38 to 50
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        // Ship shape drawing function - longer and thinner oval
+        const drawShip = (ctx, color) => {
           ctx.clearRect(0, 0, size, size);
-          drawShip(ctx, '#FF4136');
-          map.addImage('ship-icon-fast', { 
-            width: size, 
-            height: size, 
-            data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer) 
-          });
-          
-          // Add orange ship icon (for medium speed vessels)
-          ctx.clearRect(0, 0, size, size);
-          drawShip(ctx, '#FF851B');
-          map.addImage('ship-icon-medium', { 
-            width: size, 
-            height: size, 
-            data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer) 
-          });
-          
-        } catch (err) {
-          console.error('Error adding ship icon:', err);
-        }
+
+          // Begin ship shape
+          ctx.fillStyle = color;
+          ctx.beginPath();
+
+          // Draw a longer, thinner oval shape with pointed top and bottom
+          // Start at the bow (front/top point)
+          ctx.moveTo(size / 2, 1);                 // Front point (sharp bow)
+
+          // Right side - single smooth curve from top to bottom
+          ctx.bezierCurveTo(
+            size * 0.75, size * 0.25,               // Control point 1 - moved inward for thinner shape
+            size * 0.75, size * 0.75,               // Control point 2 - symmetric to create continuous curve
+            size / 2, size - 1                      // End point (stern/bottom point)
+          );
+
+          // Left side - single smooth curve from bottom to top
+          ctx.bezierCurveTo(
+            size * 0.25, size * 0.75,               // Control point 1 - moved inward for thinner shape
+            size * 0.25, size * 0.25,               // Control point 2 - symmetric to create continuous curve
+            size / 2, 1                           // End point (back to bow)
+          );
+
+          ctx.closePath();
+          ctx.fill();
+
+          // Fine outline for better definition
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 1.2;                  // Reduced from 1.5 to 1.2 for finer outline
+          ctx.stroke();
+        };
+
+        // Draw the default green ship
+        drawShip(ctx, '#2ECC40');
+
+        // Add the image to the map
+        map.addImage('ship-icon', {
+          width: size,
+          height: size,
+          data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer)
+        });
+
+        // Add red ship icon (for fast vessels)
+        ctx.clearRect(0, 0, size, size);
+        drawShip(ctx, '#FF4136');
+        map.addImage('ship-icon-fast', {
+          width: size,
+          height: size,
+          data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer)
+        });
+
+        // Add orange ship icon (for medium speed vessels)
+        ctx.clearRect(0, 0, size, size);
+        drawShip(ctx, '#FF851B');
+        map.addImage('ship-icon-medium', {
+          width: size,
+          height: size,
+          data: new Uint8Array(ctx.getImageData(0, 0, size, size).data.buffer)
+        });
+
+
       }
 
       // Replace circle layer with ship symbol layer
-      try {
-        if (!map.getLayer('vessels-circle')) {
-          map.addLayer({
-            id: 'vessels-circle',
-            type: 'symbol',
-            source: 'vessels-source',
-            layout: {
-              // Use appropriate ship icon based on speed
-              'icon-image': [
-                'case',
-                ['>=', ['get', 'speed'], 15], 'ship-icon-fast',     // Fast: Red
-                ['>=', ['get', 'speed'], 5], 'ship-icon-medium',    // Medium: Orange
-                'ship-icon'                                           // Slow: Green
-              ],
-              // Size based on zoom level - increased sizes further
-              'icon-size': [
-                'interpolate', ['linear'], ['zoom'],
-                0, 0.1,    // Increased from 0.8 to 1.0 at global zoom
-                10, 0.5,   // Increased from 1.2 to 1.4 at medium zoom
-                14, 0.8    // Increased from 1.5 to 1.8 at high zoom
-              ],
-              // Rotate the ship based on heading or course
-              'icon-rotate': [
-                'case',
-                ['!=', ['get', 'heading'], null],
-                ['get', 'heading'],
-                ['!=', ['get', 'course'], null],
-                ['get', 'course'],
-                0
-              ],
-              'icon-rotation-alignment': 'map',
-              'icon-allow-overlap': true,
-              'icon-ignore-placement': true,
-              'visibility': visible ? 'visible' : 'none'
-            }
-          });
-        }
-      } catch (err) {
-        console.error('Error adding vessel symbol layer:', err);
+
+      if (!map.getLayer('vessels-circle')) {
+        map.addLayer({
+          id: 'vessels-circle',
+          type: 'symbol',
+          source: 'vessels-source',
+          layout: {
+            // Use appropriate ship icon based on speed
+            'icon-image': [
+              'case',
+              ['>=', ['get', 'speed'], 15], 'ship-icon-fast',     // Fast: Red
+              ['>=', ['get', 'speed'], 5], 'ship-icon-medium',    // Medium: Orange
+              'ship-icon'                                           // Slow: Green
+            ],
+            // Size based on zoom level - increased sizes further
+            'icon-size': [
+              'interpolate', ['linear'], ['zoom'],
+              0, 0.1,    // Increased from 0.8 to 1.0 at global zoom
+              10, 0.5,   // Increased from 1.2 to 1.4 at medium zoom
+              14, 0.8    // Increased from 1.5 to 1.8 at high zoom
+            ],
+            // Rotate the ship based on heading or course
+            'icon-rotate': [
+              'case',
+              ['!=', ['get', 'heading'], null],
+              ['get', 'heading'],
+              ['!=', ['get', 'course'], null],
+              ['get', 'course'],
+              0
+            ],
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            'visibility': visible ? 'visible' : 'none'
+          }
+        });
       }
 
+
       // Add vessel label layer
-      try {
-        if (!map.getLayer('vessels-label')) {
-          map.addLayer({
-            id: 'vessels-label',
-            type: 'symbol',
-            source: 'vessels-source',
-            layout: {
-              'text-field': ['get', 'name'],
-              'text-font': ['Open Sans Regular'],
-              'text-offset': [0, 1.5],
-              'text-anchor': 'top',
-              'text-size': [
-                'interpolate', ['linear'], ['zoom'],
-                8, 10,  // Small text at low zoom
-                14, 14  // Larger text at high zoom
-              ],
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              'visibility': showVesselNames ? 'visible' : 'none'
-            },
-            paint: {
-              'text-color': '#ffffff',
-              'text-halo-color': 'rgba(0, 0, 0, 0.75)',
-              'text-halo-width': 1.5
-            }
-          });
-        }
-      } catch (err) {
-        console.error('Error adding vessel label layer:', err);
+
+      if (!map.getLayer('vessels-label')) {
+        map.addLayer({
+          id: 'vessels-label',
+          type: 'symbol',
+          source: 'vessels-source',
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['Open Sans Regular'],
+            'text-offset': [0, 1.5],
+            'text-anchor': 'top',
+            'text-size': [
+              'interpolate', ['linear'], ['zoom'],
+              8, 10,  // Small text at low zoom
+              14, 14  // Larger text at high zoom
+            ],
+            'text-allow-overlap': false,
+            'text-ignore-placement': false,
+            'visibility': showVesselNames ? 'visible' : 'none'
+          },
+          paint: {
+            'text-color': '#ffffff',
+            'text-halo-color': 'rgba(0, 0, 0, 0.75)',
+            'text-halo-width': 1.5
+          }
+        });
       }
 
       // Remove the separate direction indicator layer since we've integrated direction into the ship icon
-      try {
-        if (map.getLayer('vessels-direction')) {
-          map.removeLayer('vessels-direction');
-        }
-      } catch (err) {
-        console.warn('Could not remove vessel direction layer:', err.message);
+
+      if (map.getLayer('vessels-direction')) {
+        map.removeLayer('vessels-direction');
       }
+
 
       // Add click event for vessel popups if not already added
       if (!map._clickHandlerAdded) {
@@ -626,57 +578,23 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
 
     // Cleanup on unmount
     return () => {
-      if (!map) return;
-      
-      // Need to check if map still exists and if it has these methods
       try {
-        // Clean up event listeners
-        if (map.off) {
-          map.off('click', 'vessels-circle');
-          map.off('mouseenter', 'vessels-circle');
-          map.off('mouseleave', 'vessels-circle');
+        if (map?.getLayer) {
+          if (map.getLayer('vessels-circle')) {
+            map.removeLayer('vessels-circle');
+          }
+          if (map.getLayer('vessels-direction')) {
+            map.removeLayer('vessels-direction');
+          }
+          if (map.getLayer('vessels-label')) {
+            map.removeLayer('vessels-label');
+          }
+          if (map.getSource('vessels-source')) {
+            map.removeSource('vessels-source');
+          }
         }
-        
-        // Remove layers if they exist
-        if (map.getLayer && map.getLayer('vessels-circle')) {
-          map.removeLayer('vessels-circle');
-        }
-        if (map.getLayer && map.getLayer('vessels-direction')) {
-          map.removeLayer('vessels-direction');
-        }
-        if (map.getLayer && map.getLayer('vessels-label')) {
-          map.removeLayer('vessels-label');
-        }
-        
-        // Remove the source if it exists
-        if (map.getSource && map.getSource('vessels-source')) {
-          map.removeSource('vessels-source');
-        }
-
-        // Remove custom images
-        if (map.hasImage && map.hasImage('ship-icon')) {
-          map.removeImage('ship-icon');
-        }
-        if (map.hasImage && map.hasImage('ship-icon-fast')) {
-          map.removeImage('ship-icon-fast');
-        }
-        if (map.hasImage && map.hasImage('ship-icon-medium')) {
-          map.removeImage('ship-icon-medium');
-        }
-        
-        if (popupRef.current) {
-          popupRef.current.remove();
-        }
-        
-        // Remove hover popup if it exists
-        if (map._hoverPopup) {
-          map._hoverPopup.remove();
-          map._hoverPopup = null;
-        }
-        
-        delete map._clickHandlerAdded;
-      } catch (err) {
-        console.warn('Error cleaning up vessel layers:', err);
+      } catch (error) {
+        console.warn('Error cleaning up vessel layers:', error);
       }
     };
   }, [map, visible, showVesselNames, darkMode]);
@@ -685,28 +603,24 @@ const VesselLayer = ({ map, visible = true, refreshInterval = 10000 }) => {
   useEffect(() => {
     if (!map || !mapLoadedRef.current) return;
 
-    try {
-      if (map.getLayer('vessels-circle')) {
-        map.setLayoutProperty(
-          'vessels-circle',
-          'visibility',
-          visible ? 'visible' : 'none'
-        );
-      }
 
-      if (map.getLayer('vessels-label')) {
-        map.setLayoutProperty(
-          'vessels-label',
-          'visibility',
-          showVesselNames ? 'visible' : 'none'
-        );
-      }
-    } catch (err) {
-      console.warn('Error updating layer visibility:', err);
+    if (map.getLayer('vessels-circle')) {
+      map.setLayoutProperty(
+        'vessels-circle',
+        'visibility',
+        visible ? 'visible' : 'none'
+      );
     }
+
+    if (map.getLayer('vessels-label')) {
+      map.setLayoutProperty(
+        'vessels-label',
+        'visibility',
+        showVesselNames ? 'visible' : 'none'
+      );
+    }
+
   }, [map, visible, showVesselNames]);
-
-
 };
 
 VesselLayer.propTypes = {

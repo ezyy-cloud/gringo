@@ -20,6 +20,7 @@ const AppContent = lazy(() => import('./components/AppContent'));
 const Auth = lazy(() => import('./components/auth/Auth'));
 const PWAInstallPrompt = lazy(() => import('./components/PWAInstallPrompt'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
+const Profile = lazy(() => import('./components/Profile'));
 
 // Component loading fallback
 const ComponentLoader = () => (
@@ -39,12 +40,12 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [notifications, setNotifications] = useState([])
   
-  // Define state for messages timestamp (used for refreshing)
-  const [messagesTimestamp, setMessagesTimestamp] = useState(Date.now())
-
   // Add context
   const { isOffline } = useContext(AppContext);
   
+  // Define state for messages timestamp (used for refreshing)
+  const [setMessagesTimestamp] = useState(Date.now());
+
   // Create refs for functions and state to prevent stale closures
   const messagesRef = useRef(messages);
   const onlineUsersRef = useRef(onlineUsers);
@@ -54,7 +55,7 @@ function App() {
   // Helper function to update messages timestamp - define this early
   const updateMessagesTimestamp = useCallback(() => {
     setMessagesTimestamp(Date.now());
-  }, []);
+  }, [setMessagesTimestamp]);
 
   // Forward declare function references with useRef
   const fetchMessagesWithoutResetRef = useRef(null);
@@ -70,19 +71,10 @@ function App() {
   }, [messages, onlineUsers, user, notifications, updateMessagesTimestamp]);
   
   // Function to navigate to profiles when receiving notifications
-  const navigateToProfile = useCallback((username) => {
-    window.location.href = `/profile/${username}`;
-  }, []);
   
   // Update the addMessage function to include image support
   const addMessage = useCallback((sender, content, isReceived, timestamp = new Date(), location = null, messageId = null, image = null) => {
-    // Check if the message is a system message (convert to console log)
-    const isSystemMessage = sender === 'System' || sender === 'Server';
-    
-    if (isSystemMessage) {
-      console.log(`System message: ${content}`);
-      return;
-    }
+ 
     
     setMessages(prevMessages => {
       // Create new message object
@@ -122,28 +114,14 @@ function App() {
   const [fetchState, setFetchState] = useState(MESSAGE_FETCH_STATES.IDLE);
   
   // Fetch messages function that doesn't reset view
-  const fetchMessagesWithoutReset = useCallback(async (retryCount = 0, forceRefresh = false) => {
+  const fetchMessagesWithoutReset = useCallback(async (retryCount = 0) => {
     // Skip if offline
     if (isOffline) {
-      console.log('🔄 fetchMessagesWithoutReset: Offline, skipping message fetch');
-      return;
-    }
-    
-    // Skip if already fetching to prevent duplicate requests
-    if (fetchState === MESSAGE_FETCH_STATES.FETCHING && !forceRefresh) {
-      console.log('🔄 fetchMessagesWithoutReset: Already fetching messages, skipping this request');
       return;
     }
     
     // Implement debouncing - prevent calling the API more than once every 10 seconds
     const now = Date.now();
-    const timeSinceLastFetch = now - lastFetchTime;
-    const minTimeBetweenFetches = 10000; // 10 seconds
-    
-    if (timeSinceLastFetch < minTimeBetweenFetches && retryCount === 0 && !forceRefresh) {
-      console.log(`🔄 fetchMessagesWithoutReset: Skipping fetch - too soon (${timeSinceLastFetch}ms since last fetch)`);
-      return;
-    }
     
     // Update the last fetch time and set fetch state
     setLastFetchTime(now);
@@ -153,21 +131,15 @@ function App() {
     const fetchCount = parseInt(sessionStorage.getItem('messageFetchCount') || '0');
     sessionStorage.setItem('messageFetchCount', (fetchCount + 1).toString());
     
-    console.log(`🔄 fetchMessagesWithoutReset: Starting to fetch messages (Count: ${fetchCount + 1})`);
-    
     try {
       
-      console.log('🔄 fetchMessagesWithoutReset: About to call apiService.getMessages()');
       const response = await apiService.getMessages();
-      console.log('🔄 fetchMessagesWithoutReset: Response received:', response);
       
       if (response && response.success) {
-        console.log('🔄 fetchMessagesWithoutReset: Response was successful');
         setFetchState(MESSAGE_FETCH_STATES.SUCCESS);
         
         // Check if messages array exists and has items
         if (response.messages && Array.isArray(response.messages)) {
-          console.log(`🔄 fetchMessagesWithoutReset: Found ${response.messages.length} messages in response`);
           
           // Format messages correctly for the MapView component
           const formattedMessages = response.messages.map(msg => {
@@ -191,11 +163,9 @@ function App() {
               
               // Check if timestamp is valid
               if (isNaN(timestamp.getTime())) {
-                console.log('🔄 Invalid timestamp for message:', msg);
                 timestamp = new Date(); // Fallback to current time
               }
-            } catch (error) {
-              console.error('🔄 Error parsing timestamp:', error);
+            } catch {
               timestamp = new Date(); // Fallback to current time
             }
             
@@ -227,8 +197,6 @@ function App() {
             };
           });
           
-          console.log('🔄 Formatted messages for MapView:', formattedMessages);
-          
           // Filter messages to only show those from the last 30 minutes
           const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
           const recentMessages = formattedMessages.filter(msg => {
@@ -239,22 +207,7 @@ function App() {
             // Check if message is from the last 30 minutes
             return messageTime >= thirtyMinutesAgo;
           });
-          
-          console.log(`🔄 Filtered to ${recentMessages.length} messages from the last 30 minutes (out of ${formattedMessages.length} total)`);
-          
-          // Check how many messages have location data
-          const messagesWithLocation = recentMessages.filter(msg => 
-            msg.location && msg.location.latitude && msg.location.longitude
-          );
-          console.log(`🔄 fetchMessagesWithoutReset: ${messagesWithLocation.length} out of ${recentMessages.length} messages have valid location data`);
-          
-          // If we have messages with location, log an example
-          if (messagesWithLocation.length > 0) {
-            console.log('🔄 fetchMessagesWithoutReset: Example message with location:', messagesWithLocation[0]);
-          } else {
-            console.log('🔄 fetchMessagesWithoutReset: No messages with location found.');
-          }
-          
+      
           // Update messages state efficiently by comparing with previous messages
           // This helps prevent unnecessary re-renders
           setMessages(prevMessages => {
@@ -283,22 +236,17 @@ function App() {
                 
                 // If no changes, return the previous messages to prevent re-render
                 if (!hasChanges) {
-                  console.log('🔄 fetchMessagesWithoutReset: No changes in messages, preventing re-render');
-                  return prevMessages;
+                return prevMessages;
                 }
               }
             }
             
             // If we get here, there are actual changes, so return the new messages
-            console.log('🔄 fetchMessagesWithoutReset: Setting messages state with filtered data');
-            return recentMessages;
+           return recentMessages;
           });
-        } else {
-          console.log('🔄 fetchMessagesWithoutReset: No messages array in response or empty array', response.messages);
-          
+        } else { 
           // If no messages and we haven't retried too many times, try again
           if (retryCount < 2) {
-            console.log(`🔄 fetchMessagesWithoutReset: Retrying (attempt ${retryCount + 1})`);
             setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 1000);
             return;
           }
@@ -306,34 +254,25 @@ function App() {
         
         // Update online users
         if (response.onlineUsers) {
-          console.log('🔄 fetchMessagesWithoutReset: Setting onlineUsers state');
           setOnlineUsers(response.onlineUsers);
-        } else {
-          console.log('🔄 fetchMessagesWithoutReset: No onlineUsers in response');
         }
-        
         // Update messages timestamp
-        console.log('🔄 fetchMessagesWithoutReset: Updating messages timestamp');
         updateMessagesTimestamp();
       } else {
-        console.error('🔄 fetchMessagesWithoutReset: Response was not successful', response);
         setFetchState(MESSAGE_FETCH_STATES.ERROR);
         
         // If error response and we haven't retried too many times, try again
         // But only retry once (instead of twice) and with a longer delay
         if (retryCount < 1) {
-          console.log(`🔄 fetchMessagesWithoutReset: Retrying after error (attempt ${retryCount + 1})`);
           setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 5000); // Wait 5 seconds before retry
           return;
         }
       }
     } catch (error) {
-      console.error('🔄 fetchMessagesWithoutReset: Error fetching messages:', error);
       setFetchState(MESSAGE_FETCH_STATES.ERROR);
       
       // Check for rate limiting (429) errors
       if (error.response && error.response.status === 429) {
-        console.warn('🔄 fetchMessagesWithoutReset: Rate limited (429), backing off');
         // Don't retry immediately - wait at least 30 seconds
         return;
       }
@@ -341,12 +280,10 @@ function App() {
       // If error and we haven't retried too many times, try again
       // But only retry once (instead of twice) and with a longer delay
       if (retryCount < 1) {
-        console.log(`🔄 fetchMessagesWithoutReset: Retrying after exception (attempt ${retryCount + 1})`);
         setTimeout(() => fetchMessagesWithoutReset(retryCount + 1), 5000); // Wait 5 seconds before retry
         return;
       }
     } finally {
-      console.log('🔄 fetchMessagesWithoutReset: Finished, setting loading state to false');
       setIsLoading(false);
     }
   }, [isOffline, updateMessagesTimestamp, lastFetchTime, fetchState]);
@@ -366,13 +303,11 @@ function App() {
     
     // Reset socket initialization state if user changes
     if (socketInitializedRef.current && user.username) {
-      console.log(`⚡ Socket: New user detected (${user.username}), resetting socket initialization state`);
       socketInitializedRef.current = false;
     }
 
     // Skip if we've already initialized for this user
     if (socketInitializedRef.current) {
-      console.log('⚡ Socket: Socket already initialized for current user, skipping');
       return;
     }
     
@@ -396,17 +331,14 @@ function App() {
     
     // Only apply cooldown if we've had multiple connection attempts
     if (connectionAttempts > 2 && lastAttempt && timeSinceLastAttempt < connectionCooldown) {
-      console.log(`⚡ Socket: Connection attempt too soon (${timeSinceLastAttempt}ms since last attempt), waiting for cooldown`);
       return;
     } 
     // Prevent excessive reconnection attempts over time
     else if (connectionAttempts >= maxConnectionAttempts) {
       // Reset attempts counter after a full cooldown period to avoid permanent lockout
       if (timeSinceLastAttempt > connectionCooldown * 2) {
-        console.log(`⚡ Socket: Resetting connection attempts counter after extended cooldown`);
         sessionStorage.setItem(connectionAttemptKey, '0');
       } else {
-        console.log(`⚡ Socket: Too many connection attempts (${connectionAttempts}), cooling down`);
         return;
       }
     }
@@ -415,13 +347,11 @@ function App() {
     sessionStorage.setItem(connectionAttemptKey, (connectionAttempts + 1).toString());
     sessionStorage.setItem(connectionTimeKey, now.toString());
     
-    console.log('⚡ Socket: Initializing socket connection for user:', user.username);
     
     try {
       // Define socket callbacks immediately to avoid duplicating code
       const socketCallbacks = {
         onConnect: () => {
-          console.log('⚡ Socket: Connected successfully');
           setIsConnected(true);
           setConnectionError(null);
           // Mark as initialized once connection is successful
@@ -429,48 +359,34 @@ function App() {
           // Reset connection attempts on successful connection
           sessionStorage.setItem(connectionAttemptKey, '0');
         },
-        onConnectError: (error) => {
-          console.error('⚡ Socket: Connection error:', error);
+        onConnectError: () => {
           setIsConnected(false);
           setConnectionError('Could not connect to server. Retrying...');
         },
-        onDisconnect: (reason) => {
-          console.log('⚡ Socket: Disconnected, reason:', reason);
+        onDisconnect: () => {
           setIsConnected(false);
         },
-        onAuthenticated: (data) => {
-          console.log('⚡ Socket: Authentication successful:', data);
+        onAuthenticated: () => {
           // Fetch messages only if we haven't already fetched them recently
           const now = Date.now();
           const timeSinceLastFetch = now - lastFetchTime;
           const minTimeBetweenFetches = 5000; // 5 seconds
           
           if (timeSinceLastFetch > minTimeBetweenFetches && fetchState !== MESSAGE_FETCH_STATES.FETCHING) {
-            console.log('⚡ Socket: Fetching messages after authentication');
             fetchMessagesWithoutReset();
-          } else {
-            console.log('⚡ Socket: Skipping message fetch after authentication - recent fetch already in progress');
           }
         },
         onAuthenticationFailed: (data) => {
-          console.error('⚡ Socket: Authentication failed:', data);
           setConnectionError('Authentication failed. Please log in again.');
           // Clear token and redirect to login if authentication fails
           if (data && data.error === 'Invalid authentication token') {
             handleLogout();
           }
         },
-        onWelcome: (data) => {
-          console.log('⚡ Socket: Received welcome message:', data);
-        },
-        onNewMessage: (data) => {
-          console.log('⚡ Socket: Received new message event:', data);
-          // Don't add messages directly from broadcast
-          // Messages will be fetched when refresh signal is received
-        },
+        onWelcome: () => {},
+        onNewMessage: () => {},
         onMessageAck: (data) => {
-          console.log('⚡ Socket: Message acknowledgment received:', data);
-          // Update local message with server-assigned ID
+        // Update local message with server-assigned ID
           if (data && data.dbId) {
             setMessages(prevMessages => 
               prevMessages.map(msg => {
@@ -482,7 +398,6 @@ function App() {
                 // If it's a recent message (within last 10 seconds) from this user without dbId 
                 // it's likely the one we just sent
                 if (!msg.dbId && msg.sender === user?.username && timeDiff < 10000) {
-                  console.log('⚡ Socket: Updating temporary message with server ID:', data.dbId);
                   return {
                     ...msg,
                     dbId: data.dbId
@@ -494,21 +409,15 @@ function App() {
           }
         },
         onRefreshMessages: () => {
-          console.log('⚡ Socket: Processing refreshMessages signal - updating data');
           // Check if we can fetch messages based on timing and state
           const now = Date.now();
           const timeSinceLastFetch = now - lastFetchTime;
           const minTimeBetweenFetches = 10000; // 10 seconds
           
           if (fetchState !== MESSAGE_FETCH_STATES.FETCHING && timeSinceLastFetch > minTimeBetweenFetches) {
-            console.log('⚡ Socket: Refreshing messages');
             if (fetchMessagesWithoutResetRef.current) {
               fetchMessagesWithoutResetRef.current();
             }
-          } else {
-            console.log('⚡ Socket: Skipping refresh - messages were fetched recently or fetch in progress');
-            console.log(`  - Current fetch state: ${fetchState}`);
-            console.log(`  - Time since last fetch: ${timeSinceLastFetch}ms`);
           }
         },
         onUserStatusChange: (data) => {
@@ -558,7 +467,6 @@ function App() {
           }
         },
         onMessageDeleted: (data) => {
-          console.log('⚡ Socket: Message deleted', data);
           
           // Remove the deleted message from the messages list
           if (data && data.messageId) {
@@ -574,15 +482,12 @@ function App() {
       
       // Connect to the socket
       if (user && user.username) {
-        console.log('⚡ Socket: Connecting to socket with username:', user.username);
         socketService.connect(socketCallbacks, user.username);
       } else {
-        console.error('⚡ Socket: Cannot connect - invalid user or missing username');
         setConnectionError('Cannot connect - invalid user or missing username');
       }
       
-    } catch (error) {
-      console.error('⚡ Socket: Error connecting to socket:', error);
+    } catch {
       setConnectionError('Error connecting to server. Please try again later.');
       setIsConnected(false);
     }
@@ -593,7 +498,6 @@ function App() {
   // Separate cleanup effect for socket disconnection - only runs on component unmount
   useEffect(() => {
     return () => {
-      console.log('⚡ Socket: Cleaning up socket connection on App unmount');
       socketService.disconnect();
       socketInitializedRef.current = false;
     };
@@ -605,17 +509,14 @@ function App() {
       return; // Only run this effect if logged in and in fallback mode
     }
     
-    console.log('⚡ Socket: In fallback mode, setting up periodic server checks');
     
     // Check server every 30 seconds to see if it's back up
     const serverCheckInterval = setInterval(async () => {
-      console.log('⚡ Socket: Fallback mode - checking if server is back up');
       
-      try {
+   
         const serverStatus = await socketService.checkServerStatus();
         
         if (serverStatus.success) {
-          console.log('⚡ Socket: Server is now reachable, will exit fallback mode');
           clearInterval(serverCheckInterval);
           
           // Update the connection state (will trigger the main socket connection effect)
@@ -623,12 +524,8 @@ function App() {
           
           // Disable fallback mode
           socketService.disableFallbackMode();
-        } else {
-          console.log('⚡ Socket: Server still unreachable, staying in fallback mode');
-        }
-      } catch (error) {
-        console.error('⚡ Socket: Error during fallback mode server check:', error);
-      }
+        } 
+     
     }, 30000); // Check every 30 seconds
     
     return () => {
@@ -638,39 +535,27 @@ function App() {
 
   // Check for authentication on initial load
   useEffect(() => {
-    // Log that the application now runs exclusively in 3D mode
-    console.log('🌎 GringoX web client initialized - now running exclusively in 3D mode');
     
     // Check if user is logged in
     const checkAuth = async () => {
-      console.log('🔍 checkAuth: Starting authentication check');
       try {
         // Check if user is logged in using token from localStorage
-        console.log('🔍 checkAuth: Calling authService.checkLoginStatus()');
         const userData = await authService.checkLoginStatus();
-        
-        console.log('🔍 checkAuth: Auth status result:', userData ? 'User is logged in' : 'No user data');
-        
+   
         if (userData) {
-          // User is authenticated - no redirect from initial load
-          console.log('🔍 checkAuth: About to call handleAuthSuccess with shouldRedirect=false');
           handleAuthSuccess(userData, false);
-          console.log('🔍 checkAuth: After handleAuthSuccess call');
         } else {
           // User is not authenticated
-          console.log('🔍 checkAuth: Setting user to null - not authenticated');
           setUser(null);
         }
-      } catch (error) {
+      } catch {
         // Error handling - just reset user state
-        console.error('🔍 checkAuth: Error during authentication check:', error);
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
 
-    console.log('🔍 App: Running initial authentication check');
     checkAuth();
     
     // Check for dark mode preference in localStorage
@@ -697,19 +582,15 @@ function App() {
       const minTimeBetweenFetches = 5000; // 5 seconds
       
       if (fetchState === MESSAGE_FETCH_STATES.FETCHING) {
-        console.log('🔍 App: Already fetching messages, ignoring request');
         return;
       }
       
       if (timeSinceLastFetch < minTimeBetweenFetches) {
-        console.log(`🔍 App: Recently fetched messages (${timeSinceLastFetch}ms ago), will fetch after cooling period`);
-        
         // Wait until the cooling period is over
         setTimeout(() => {
           try {
             fetchMessagesWithoutReset();
-          } catch (error) {
-            console.error('🔍 App: Error in delayed fetchMessagesWithoutReset:', error);
+          } catch {
             // Set fetch state back to idle so future fetches can proceed
             setFetchState(MESSAGE_FETCH_STATES.IDLE);
             setIsLoading(false);
@@ -721,8 +602,7 @@ function App() {
       
       // If we get here, it's safe to fetch immediately
       fetchMessagesWithoutReset();
-    } catch (error) {
-      console.error('🔍 App: Error in handleRefreshMap:', error);
+    } catch {
       // Set fetch state back to idle so future fetches can proceed
       setFetchState(MESSAGE_FETCH_STATES.IDLE);
       setIsLoading(false);
@@ -733,11 +613,8 @@ function App() {
   useEffect(() => {
     // Define the function to get user location
     const getUserLocation = () => {
-      console.log("Getting user location...");
-      
       // Check if geolocation is available
       if (!navigator.geolocation) {
-        console.log("Geolocation not supported by this browser");
         setUserLocation(() => {
           return {
             latitude: 40.7128, // NYC default
@@ -751,14 +628,13 @@ function App() {
       
       const geolocationOptions = {
         enableHighAccuracy: true,
-          timeout: 10000,
+        timeout: 10000,
         maximumAge: 300000 // 5 minutes
       };
       
       // Try to get high accuracy position first
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-          console.log("High accuracy position succeeded");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
           const location = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -767,15 +643,12 @@ function App() {
             accuracy: position.coords.accuracy,
             timestamp: position.timestamp
           };
-          console.log("Setting user location:", location);
           setUserLocation(location);
         },
         () => {
-              console.log("High accuracy position failed, trying low accuracy...");
-              // Try again with lower accuracy if high accuracy fails
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  console.log("Low accuracy position succeeded");
+          // Try again with lower accuracy if high accuracy fails
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
               const location = {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
@@ -784,11 +657,9 @@ function App() {
                 accuracy: position.coords.accuracy,
                 timestamp: position.timestamp
               };
-              console.log("Setting user location:", location);
               setUserLocation(location);
             },
             (err) => {
-              console.log("Geolocation error:", err.message);
               // Fallback to default location
               setUserLocation({
                 latitude: 40.7128, // NYC default
@@ -804,12 +675,13 @@ function App() {
       );
     };
     
-    // Get location immediately on app load
-    getUserLocation();
+    // Only get location if user is logged in
+    if (user) {
+      getUserLocation();
+    }
     
-    // Set up interval to refresh location
+    // Set up interval to refresh location only when user is logged in
     const locationInterval = setInterval(() => {
-      // Only update if the user is logged in
       if (user) {
         getUserLocation();
       }
@@ -817,8 +689,7 @@ function App() {
     
     // Setup visibility change listener to request location when app comes back to foreground
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("App in foreground, requesting location");
+      if (document.visibilityState === 'visible' && user) {
         getUserLocation();
       }
     };
@@ -834,12 +705,10 @@ function App() {
 
   // Handle successful authentication
   const handleAuthSuccess = (userData, shouldRedirect = false) => {
-    console.log('🔐 handleAuthSuccess: Called with userData:', userData, 'shouldRedirect:', shouldRedirect);
     setUser(userData.user || userData); // Handle both cases: userData or userData.user
     
     // Set dark mode preference from user data if available
     const userObject = userData.user || userData;
-    console.log('🔐 handleAuthSuccess: Setting user state with:', userObject);
     
     if (userObject && userObject.darkMode !== undefined) {
       setIsDarkMode(userObject.darkMode);
@@ -863,17 +732,10 @@ function App() {
       sessionStorage.setItem('messageFetchCount', '0');
       
       // Fetch messages once after login with a short delay to avoid request collisions
-      console.log('🔐 handleAuthSuccess: Scheduling message fetch after login');
       setTimeout(() => {
-        console.log('🔐 handleAuthSuccess: Fetching messages after login');
         fetchMessagesWithoutReset(0, true); // Force refresh
       }, 1000); // 1 second delay
-    } else {
-      console.log('🔐 handleAuthSuccess: Skipping message fetch - already initiated or recent fetch in progress');
-      console.log(`  - Fetch initiated: ${fetchInitiated ? 'Yes' : 'No'}`);
-      console.log(`  - Current fetch state: ${fetchState}`);
-      console.log(`  - Time since last fetch: ${timeSinceLastFetch}ms`);
-    }
+    } 
     
     // Clear the fetch initiated flag when the page is refreshed or closed
     window.addEventListener('beforeunload', () => {
@@ -882,7 +744,6 @@ function App() {
     
     // Redirect if requested (typically on explicit login vs token-based auth)
     if (shouldRedirect) {
-      console.log('🔐 handleAuthSuccess: Redirecting to home page');
       // For React Router v6
       window.location.href = '/';
     }
@@ -924,14 +785,9 @@ function App() {
   
   // Update user dark mode preference in the database
   const updateUserDarkModePreference = async (darkMode) => {
-    try {
-      const response = await authService.updateProfile({ darkMode });
-      if (!response.success) {
-        console.error('Failed to update dark mode preference');
-      }
-    } catch (error) {
-      console.error('Error updating dark mode preference:', error);
-    }
+   
+      await authService.updateProfile({ darkMode });
+    
   };
   
   // When dark mode changes, apply it to the document
@@ -951,28 +807,24 @@ function App() {
 
   // Handle clearing all notifications
   const handleClearNotifications = () => {
-    setNotifications(prev => []);
+    setNotifications(() => []);
   };
 
   // Periodically refresh messages when the user is logged in
   useEffect(() => {
     // Skip if user is not logged in
     if (!user) {
-      console.log('🔄 Periodic refresh: User not logged in, skipping message refresh setup');
       return;
     }
     
-    console.log('🔄 Periodic refresh: Setting up periodic message refresh');
     
     // Set up interval to refresh messages every minute
     const messageRefreshInterval = setInterval(() => {
-      console.log('🔄 Periodic refresh: Refreshing messages');
       fetchMessagesWithoutReset();
     }, 60000); // Every 60 seconds
     
     // Clean up interval on component unmount or when user changes
     return () => {
-      console.log('🔄 Periodic refresh: Cleaning up message refresh interval');
       clearInterval(messageRefreshInterval);
     };
   }, [user]); // Re-run when user changes
@@ -1024,18 +876,15 @@ function App() {
   // Handle socket message (sending)
   const handleSocketMessage = useCallback(async (message, formData = null) => {
     if (!isConnected) {
-      console.error('Cannot send message while disconnected');
       return { error: 'Cannot send message while disconnected' };
     }
     
     if (!user) {
-      console.error('Cannot send message while not logged in');
       return { error: 'Cannot send message while not logged in' };
     }
 
     // Check if user can send a message (30 minutes since last message)
     if (!canUserSendMessage()) {
-      console.log('User attempted to send message before 30-minute cooldown period');
       const timeRemaining = getTimeRemainingBeforeNextMessage();
       return { 
         error: 'You can only send a message every 30 minutes',
@@ -1056,26 +905,21 @@ function App() {
     if (!messageLocation || messageLocation.error) {
       // Generate fallback location only if no valid location exists
       messageLocation = createFallbackLocation(messages);
-      console.log('Using fallback location:', messageLocation);
     } else if (messageLocation.fuzzyLocation) {
       // Only vary locations that are already fuzzy
       messageLocation = createVariedLocation(messageLocation);
-      console.log('Using varied location:', messageLocation);
     } else {
       // Apply fuzzy location if requested
       messageLocation = createFuzzyLocation(messageLocation, useFuzzyLocation);
-      console.log(useFuzzyLocation ? 'Using fuzzy location for privacy:' : 'Using exact location:', messageLocation);
     }
 
     // If formData is provided, send with image upload
     if (formData) {
       try {
-        console.log('Sending message with image via API');
         // Send the message with image via API
         const response = await apiService.sendMessageWithImage(message, formData, messageLocation);
         
         if (response.success) {
-          console.log('Message with image sent successfully:', response);
           // Message with image was successfully sent and saved to the database
           // The server will broadcast to all clients including this one
           
@@ -1092,8 +936,7 @@ function App() {
             );
           }
         }
-      } catch (error) {
-        console.error('Error sending message with image:', error);
+      } catch {
         // Add a local error message
         addMessage('Error', 'Failed to send your message with image. Please try again.', true, currentTimestamp);
       }
@@ -1103,22 +946,12 @@ function App() {
         // Add our message locally with a temporary ID first for immediate feedback
         addMessage(user.username, message, false, currentTimestamp, messageLocation);
         
-        // Enhanced logging for debugging
-        console.log('🔄 DEBUG - User object:', JSON.stringify(user, null, 2));
-        console.log('🔄 DEBUG - User username:', user.username);
-        console.log('🔄 DEBUG - Message to send:', message);
-        console.log('🔄 DEBUG - Message location:', JSON.stringify(messageLocation, null, 2));
-        
-        // Log the username we're using
-        console.log('🔄 Sending message via socket as user:', user.username);
-        
         // Use socket to send message, ensuring consistency with bots client
         socketService.sendMessage(message, user.username, messageLocation);
         
         // We don't need to do anything else here - the server will broadcast
         // the message to all clients and trigger a refresh event
-      } catch (error) {
-        console.error('Error sending message via socket:', error);
+      } catch {
         addMessage('Error', 'Failed to send your message. Please try again.', true, currentTimestamp);
       }
     }
@@ -1155,9 +988,6 @@ function App() {
                 // by the next effect run, thanks to the sessionStorage flag
               }
             })
-            .catch(err => {
-              console.error('Error requesting notification permission:', err);
-            });
         }
       }
     }
@@ -1179,7 +1009,6 @@ function App() {
 
   // If not logged in, show the auth screen
   if (!user) {
-    console.log('🔎 Rendering Auth/Landing screen because user is null');
     return (
       <Router>
         <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
@@ -1190,7 +1019,6 @@ function App() {
           <Routes>
             <Route path="/" element={<LandingPage isDarkMode={isDarkMode} />} />
             <Route path="/auth/*" element={<Auth onAuthSuccess={(userData) => {
-              console.log('🔐 Auth component calling handleAuthSuccess with shouldRedirect=true');
               handleAuthSuccess(userData, true);
             }} isDarkMode={isDarkMode} />} />
             <Route path="*" element={<Navigate to="/auth" />} />
@@ -1201,7 +1029,6 @@ function App() {
   }
 
   // Main app content
-  console.log('🔎 Rendering main AppContent because user exists:', user?.username);
   return (
     <>
       <Router>
@@ -1213,7 +1040,7 @@ function App() {
             <Suspense fallback={<ComponentLoader />}>
               <Routes>
                 <Route 
-                  path="/" 
+                  path="/*" 
                   element={
                     <AppContent 
                       user={user}
@@ -1232,6 +1059,17 @@ function App() {
                       canUserSendMessage={canUserSendMessage}
                       getTimeRemainingBeforeNextMessage={getTimeRemainingBeforeNextMessage}
                       handleRefreshMap={handleRefreshMap}
+                    />
+                  } 
+                />
+                <Route 
+                  path="/profile/:username" 
+                  element={
+                    <Profile 
+                      user={user}
+                      isDarkMode={isDarkMode}
+                      handleLogout={handleLogout}
+                      toggleDarkMode={toggleDarkMode}
                     />
                   } 
                 />
