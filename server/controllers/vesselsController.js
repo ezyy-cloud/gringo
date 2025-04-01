@@ -18,6 +18,13 @@ let reconnectTimeoutId = null;
 let isReconnecting = false;
 let lastApiKey = AISSTREAM_API_KEY; // Use the stored API key by default
 
+// Helper function to mask API key in logs
+const maskApiKey = (apiKey) => {
+  if (!apiKey) return 'not_set';
+  if (apiKey.length < 8) return 'invalid';
+  return apiKey.substring(0, 4) + '...' + apiKey.substring(apiKey.length - 4);
+};
+
 // Connect to AISStream WebSocket with exponential backoff
 const connectToAISStream = (apiKey = AISSTREAM_API_KEY) => {
   // Store API key for reconnection
@@ -53,7 +60,11 @@ const connectToAISStream = (apiKey = AISSTREAM_API_KEY) => {
   
   try {
     console.log('Connecting to AISStream WebSocket...');
-    const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
+    const ws = new WebSocket('wss://stream.aisstream.io/v0/stream', {
+      headers: {
+        'User-Agent': 'GringoX-Vessel-Tracker/1.0'
+      }
+    });
     
     // Set a connection timeout
     const connectionTimeoutId = setTimeout(() => {
@@ -85,17 +96,24 @@ const connectToAISStream = (apiKey = AISSTREAM_API_KEY) => {
         console.log('Subscription message sent successfully');
       } catch (err) {
         console.error('Error sending subscription message:', err);
+        // If we can't send the subscription message, close the connection
+        ws.close(1000, 'Failed to send subscription message');
       }
     });
     
     ws.on('message', (data) => {
       try {
-        
         const aisMessage = JSON.parse(data);
+        
+        // Log the first message to help with debugging
+        if (reconnectAttempts === 0) {
+          console.log('Received first message:', JSON.stringify(aisMessage, null, 2));
+        }
         
         // Check for authentication errors or malformed subscription errors
         if (aisMessage.error || aisMessage.ERROR) {
           const errorMessage = aisMessage.error || aisMessage.ERROR || 'Unknown error';
+          console.error('Received error from AISStream:', errorMessage);
           
           // If it's an authentication error, don't retry with the same API key
           if (errorMessage.includes('authentication') || 
@@ -329,14 +347,5 @@ setInterval(() => {
     console.error('Error during vessel cleanup:', error);
   }
 }, cleanupInterval);
-
-// Helper function to mask API key for logs
-function maskApiKey(apiKey) {
-  if (!apiKey) return 'undefined';
-  if (apiKey.length <= 8) return '****';
-  
-  // Only show the last 4 characters
-  return '****' + apiKey.substr(apiKey.length - 4);
-}
 
 module.exports = exports; 
