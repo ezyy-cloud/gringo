@@ -7,10 +7,11 @@ const API_URL = '/api/vessels';
  * @returns {Promise<Object>} - Response data
  */
 const initializeTracking = async () => {
-
-    const response = await axios.post(`${API_URL}/init`);
+    const formData = new FormData();
+    formData.append('action', 'init');
+    
+    const response = await axios.post(`${API_URL}/init`, formData);
     return response.data;
-
 };
 
 /**
@@ -18,10 +19,8 @@ const initializeTracking = async () => {
  * @returns {Promise<Object>} - Response data with vessels array
  */
 const getVessels = async () => {
-
     const response = await axios.get(API_URL);
     return response.data;
-
 };
 
 const vesselService = {
